@@ -23,7 +23,7 @@
   --accent:#8ab4ff; --danger:#ff6b6b; --good:#6fd6a0;
   --cramp:#ffa36c; --severe:#ff6b81; --nausea:#c7a2ff; --morning:#ffd36e;
   --food:#6fd6a0; --snack:#b4dd7f; --coffee:#d9b48c; --alcohol:#ec8fc8; --water:#6cc8ff;
-  --med:#7fb2ff; --probiotic:#5fd4c8; --body:#aab3cc;
+  --med:#7fb2ff; --probiotic:#5fd4c8; --smoke:#c9ad92; --body:#aab3cc;
   --font:-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
   --mono:ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --ease:cubic-bezier(.2,.9,.25,1);
@@ -430,6 +430,7 @@ const TYPES = {
   water:    {label:'Water', cat:'food', c:'--water'},
   med:      {label:'Meds & supplements', cat:'med', c:'--med'},
   probiotic:{label:'Probiotic', cat:'med', c:'--probiotic'},
+  cigarette:{label:'Cigarette', cat:'body', c:'--smoke'},
   bowel:    {label:'Bowel movement', cat:'body', c:'--body'},
   sleep:    {label:'Sleep', cat:'body', c:'--body'},
   stress:   {label:'Stress', cat:'body', c:'--body'},
@@ -440,7 +441,8 @@ const GUT = ['cramps','severe','nausea'];
 const GROUPS = [
   ['Symptoms', ['cramps','severe','nausea','morning'], 'sym'],
   ['Food & drink', ['meal','snack','alcohol','water']],
-  ['Medication & body', ['med','probiotic','bowel','sleep','stress','exercise']],
+  ['Meds & supplements', ['med','probiotic']],
+  ['Body & habits', ['cigarette','bowel','sleep','stress','exercise']],
 ];
 const TAGS = ['Dairy','Gluten / wheat','Spicy','Greasy / fried','Onion / garlic','Sugary','Red meat','Beans / lentils','Coffee / caffeine','Fizzy drink','Takeaway'];
 
@@ -561,6 +563,7 @@ function details(e) {
       break;
     case 'alcohol': if (e.count) p.push(e.count + (e.count === 1 ? ' drink' : ' drinks')); break;
     case 'water': if (e.count) p.push(e.count + (e.count === 1 ? ' glass' : ' glasses')); break;
+    case 'cigarette': if (e.count > 1) p.push(e.count + ' cigarettes'); break;
     case 'med':
       if (e.med) p.push(e.med);
       if (e.kind) p.push(e.kind.toLowerCase());
@@ -620,7 +623,7 @@ function render() {
 function buildTiles() {
   $('#groups').innerHTML = GROUPS.map(([name, types, cls]) => `
     <section class="block"><h2>${esc(name)}</h2><div class="grid">
-      ${types.map(t => `<button type="button" class="tile ${cls || ''}" data-type="${t}" style="--c:var(${tileInfo(t).c})">
+      ${types.map((t, i) => `<button type="button" class="tile ${cls || ''} ${types.length % 2 && i === types.length - 1 ? 'wide' : ''}" data-type="${t}" style="--c:var(${tileInfo(t).c})">
         <span class="dot"></span><span class="tile-text"><span class="tile-label">${esc(tileInfo(t).label)}</span><span class="tile-meta"></span></span>
       </button>`).join('')}
     </div></section>`).join('');
@@ -639,7 +642,8 @@ function renderLog() {
     const todays = all.filter(e => tileMatch(b.dataset.type, e) && dayKey(e.t) === today);
     const meta = b.querySelector('.tile-meta');
     if (todays.length) {
-      meta.textContent = `${todays.length} today · last ${fmtTime(todays[todays.length-1].t)}`;
+      const n = b.dataset.type === 'cigarette' ? todays.reduce((a, e) => a + (e.count || 1), 0) : todays.length;
+      meta.textContent = `${n} today · last ${fmtTime(todays[todays.length-1].t)}`;
       b.classList.add('has');
     } else { meta.textContent = 'Not today'; b.classList.remove('has'); }
   });
@@ -660,7 +664,7 @@ function quickLog(tile, el) {
   const e = {id: uid(), type, t: Date.now()};
   if (type === 'meal') { e.mealType = guessMealType(e.t); e.portion = 'Normal'; e.tags = []; }
   if (info && info.preset) Object.assign(e, info.preset);
-  if (type === 'alcohol' || type === 'water') e.count = 1;
+  if (type === 'alcohol' || type === 'water' || type === 'cigarette') e.count = 1;
   if (type === 'med') {
     e.kind = 'As needed';
     if (state.meds.length === 1) { e.med = state.meds[0].name; e.kind = state.meds[0].kind || 'As needed'; }
@@ -728,6 +732,12 @@ function fieldsFor(e) {
     }
     case 'alcohol': out.push(stepField('count', e.count, 'How many drinks?', 'Standard drinks', 1, 1, 20)); break;
     case 'water': out.push(stepField('count', e.count, 'How much?', 'Glasses', 1, 1, 20)); break;
+    case 'cigarette': {
+      out.push(stepField('count', e.count, 'How many?', 'Cigarettes', 1, 1, 40));
+      const lm = all.filter(m => m.type === 'meal' && m.t <= e.t).pop();
+      if (!lm || e.t - lm.t > 3*H) out.push(`<div class="hint">Empty stomach: no food logged in the 3 hours before this.</div>`);
+      break;
+    }
     case 'med': {
       const sel = e._sel || [];
       const meds = [...state.meds].sort((a, b) => (a.kind === 'As needed' ? 0 : 1) - (b.kind === 'As needed' ? 0 : 1));
@@ -1041,6 +1051,11 @@ function doctorText() {
   if (meals.length) habit.push(`- Meals logged: ${meals.length}${gaps.length ? `, typical gap between meals ${hr1(median(gaps))}` : ''}`);
   if (coffee) habit.push(`- Coffees: ${coffee}`);
   if (drinks) habit.push(`- Alcoholic drinks: ${drinks}`);
+  const cigs = list.filter(e => e.type === 'cigarette');
+  if (cigs.length) {
+    const total = cigs.reduce((a, e) => a + (e.count || 1), 0), days = new Set(cigs.map(e => dayKey(e.t))).size;
+    habit.push(`- Cigarettes: ${total} on ${days} ${days === 1 ? 'day' : 'days'} (about ${(total / days).toFixed(1).replace(/\.0$/, '')} a day when smoking)`);
+  }
   if (sleeps.length) habit.push(`- Sleep: average ${hr1(sleeps.reduce((a,b)=>a+b,0)/sleeps.length)} a night (${sleeps.length} nights logged)`);
   if (stress.length) habit.push(`- Stress: average ${(stress.reduce((a,b)=>a+b,0)/stress.length).toFixed(1)}/5`);
   if (habit.length) { L.push('EATING & HABITS'); L.push(...habit); L.push(''); }
@@ -1160,6 +1175,19 @@ function analyze(entries) {
     if (ha >= 2 && a - b >= 0.25) res.patterns.push({score: a - b, title, text:`${phrase} on ${pct(a)} of days with symptoms, compared with ${pct(b)} of days without.`});
   };
   factor('Alcohol', k => has(k, e => e.type === 'alcohol') || has(prevKey(k), e => e.type === 'alcohol'), 'You drank alcohol that day or the day before');
+  factor('Smoking', k => has(k, e => e.type === 'cigarette'), 'You smoked');
+  {
+    const cig = all.filter(e => e.type === 'cigarette');
+    if (cig.length && syms.length >= 3) {
+      const after = syms.filter(s => cig.some(c => c.t <= s.t && s.t - c.t <= 2*H)).length;
+      if (after >= 3 && after / syms.length >= 0.3)
+        res.patterns.push({score: after / syms.length, title:'Cigarettes', text:`${after} of ${syms.length} symptom entries came within 2 hours of a cigarette.`});
+      const empty = cig.filter(c => !mealsIn(c.t, 3*H).length);
+      const afterEmpty = syms.filter(s => empty.some(c => c.t <= s.t && s.t - c.t <= 2*H)).length;
+      if (afterEmpty >= 2)
+        res.patterns.push({score: afterEmpty / syms.length + 0.05, title:'Smoking on an empty stomach', text:`${afterEmpty} of ${syms.length} symptom entries came within 2 hours of a cigarette with no food in the 3 hours before it.`});
+    }
+  }
   factor('Short sleep', k => has(k, e => e.type === 'sleep' && e.hours != null && e.hours < 6), 'You slept under 6 hours');
   factor('High stress', k => has(k, e => e.type === 'stress' && e.level >= 4), 'Your stress was 4 or 5 out of 5');
   factor('Loose bowel movements', k => has(k, e => e.type === 'bowel' && e.kind === 'Loose'), 'You logged a loose bowel movement');
