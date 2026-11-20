@@ -1,0 +1,1252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cramp Logger</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="theme-color" content="#0b0c0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cramps">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+/* Layout: one phone-width column, an iOS-style large title per tab, a translucent tab bar, and bottom sheets for detail. */
+:root{
+  color-scheme: dark;
+  --bg:#0b0c0f; --surface:#15171c; --surface-2:#1d2027; --surface-3:#272b34;
+  --line:rgba(225,232,255,.08); --line-2:rgba(225,232,255,.14);
+  --fg:#f2f4f7; --fg-2:#a3a9b5; --fg-3:#6e7482;
+  --accent:#8ab4ff; --danger:#ff6b6b; --good:#6fd6a0;
+  --cramp:#ffa36c; --severe:#ff6b81; --nausea:#c7a2ff; --morning:#ffd36e;
+  --food:#6fd6a0; --coffee:#d9b48c; --alcohol:#ec8fc8; --water:#6cc8ff;
+  --med:#7fb2ff; --body:#aab3cc;
+  --font:-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
+  --mono:ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --ease:cubic-bezier(.2,.9,.25,1);
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box}
+html,body{background:var(--bg);color:var(--fg)}
+body{margin:0;font:16px/1.4 var(--font);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;overscroll-behavior-y:none}
+[hidden]{display:none!important}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;touch-action:manipulation}
+input,textarea,select{font:inherit;color:var(--fg)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+
+main{max-width:560px;margin:0 auto;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:6px calc(100px + env(safe-area-inset-bottom,0px))}
+.view{display:flex;flex-direction:column;gap:22px}
+.hero{display:flex;flex-direction:column;gap:2px;padding-top:10px}
+.eyebrow{margin:0;font-size:13px;font-weight:600;letter-spacing:.02em;color:var(--fg-2);text-transform:uppercase}
+h1{margin:0;font-size:34px;line-height:1.1;font-weight:700;letter-spacing:-.022em}
+.sub{margin:4px 0 0;color:var(--fg-2);font-size:15px}
+.sub b{color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums}
+h2{margin:0 0 10px;font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--fg-3)}
+.muted{color:var(--fg-3)}
+section.block{display:flex;flex-direction:column}
+
+/* Quick-log tiles */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tile{--c:var(--accent);position:relative;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:12px;
+  min-height:86px;padding:14px 14px 12px;border-radius:20px;text-align:left;
+  background:var(--surface);
+  box-shadow:inset 0 0 0 1px var(--line);
+  transition:transform 120ms ease-out, background-color 120ms ease-out}
+.tile:active{transform:scale(.965);background:var(--surface-2)}
+.tile .dot{width:10px;height:10px;border-radius:50%;background:var(--c);box-shadow:0 0 0 4px color-mix(in srgb,var(--c) 18%,transparent)}
+.tile-label{font-size:17px;font-weight:600;letter-spacing:-.01em;line-height:1.2}
+.tile-meta{font-size:12.5px;color:var(--fg-3);font-variant-numeric:tabular-nums;min-height:1.2em}
+.tile.has .tile-meta{color:color-mix(in srgb,var(--c) 75%,var(--fg))}
+.tile.wide{grid-column:1/-1;min-height:64px;flex-direction:row;align-items:center}
+.tile-text{display:flex;flex-direction:column;gap:3px;min-width:0}
+.tile.wide .tile-text{flex:1}
+.tile.sym{background:color-mix(in srgb,var(--c) 9%,var(--surface))}
+.tile.flash{animation:flash 520ms var(--ease)}
+@keyframes flash{0%{box-shadow:inset 0 0 0 1px var(--line),0 0 0 0 color-mix(in srgb,var(--c) 55%,transparent)}100%{box-shadow:inset 0 0 0 1px var(--line),0 0 0 14px transparent}}
+
+/* Follow-up cards */
+.follow{display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:18px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
+.follow p{margin:0;font-weight:600}
+.follow small{display:block;color:var(--fg-2);font-weight:400;font-size:13px;margin-top:2px}
+.follow .seg{margin:0}
+
+/* Segmented + chips */
+.seg{display:flex;gap:4px;padding:3px;border-radius:12px;background:var(--surface-2);flex-wrap:wrap}
+.seg button{flex:1 1 0;min-width:0;padding:8px 6px;border-radius:9px;font-size:14.5px;font-weight:500;color:var(--fg-2);white-space:nowrap;transition:background-color 140ms, color 140ms}
+.seg button.on{background:var(--surface-3);color:var(--fg);box-shadow:0 1px 3px rgba(0,0,0,.35)}
+.seg button:active{transform:scale(.97)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:7px 12px;border-radius:999px;background:var(--surface-2);font-size:14px;color:var(--fg-2);box-shadow:inset 0 0 0 1px var(--line);transition:background-color 140ms,color 140ms}
+.chip.on{background:color-mix(in srgb,var(--c,var(--accent)) 22%,var(--surface-2));color:var(--fg);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c,var(--accent)) 60%,transparent)}
+.chip:active{transform:scale(.96)}
+
+/* History */
+.toolbar{display:flex;flex-direction:column;gap:10px}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 16px;border-radius:12px;background:var(--surface-2);font-weight:600;font-size:15px;box-shadow:inset 0 0 0 1px var(--line);transition:transform 100ms ease-out}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--accent);color:#0b1220;box-shadow:none}
+.btn.danger{color:var(--danger)}
+.btn.grow{flex:1 1 0}
+.day{display:flex;flex-direction:column;gap:6px}
+.day-h{display:flex;justify-content:space-between;align-items:baseline;padding:0 4px;font-size:13px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--fg-2)}
+.day-h .muted{text-transform:none;letter-spacing:0;font-weight:500}
+.rows{display:flex;flex-direction:column;border-radius:16px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);overflow:hidden}
+.row{--c:var(--accent);display:grid;grid-template-columns:4.8em 10px 1fr;align-items:start;gap:10px;padding:12px 14px;text-align:left;width:100%}
+.row+.row{border-top:1px solid var(--line)}
+.row:active{background:var(--surface-2)}
+.r-time{font-size:14px;color:var(--fg-2);font-variant-numeric:tabular-nums;padding-top:1px}
+.row .dot{width:9px;height:9px;border-radius:50%;background:var(--c);margin-top:6px}
+.r-main{display:flex;flex-direction:column;gap:2px;min-width:0}
+.r-label{font-weight:600;font-size:15.5px}
+.r-det{font-size:13.5px;color:var(--fg-2);overflow-wrap:anywhere}
+.pill{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;background:var(--surface-3);color:var(--fg-2);vertical-align:2px}
+.empty{padding:28px 18px;border-radius:18px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);color:var(--fg-2);text-align:center}
+.empty strong{display:block;color:var(--fg);font-size:17px;margin-bottom:4px}
+
+/* Patterns */
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{--c:var(--accent);padding:14px;border-radius:18px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);display:flex;flex-direction:column;gap:2px}
+.stat .k{font-size:13px;color:var(--fg-2);display:flex;align-items:center;gap:6px}
+.stat .k::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--c)}
+.stat .v{font-size:30px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1}
+.stat .d{font-size:12.5px;color:var(--fg-3);font-variant-numeric:tabular-nums}
+.card{padding:16px;border-radius:18px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);display:flex;flex-direction:column;gap:12px}
+.card p{margin:0}
+.bars{display:flex;flex-direction:column;gap:9px}
+.bar{display:grid;grid-template-columns:7.5em 1fr 2em;align-items:center;gap:10px;font-size:14px}
+.bar .lbl{color:var(--fg-2)}
+.bar .track{height:10px;border-radius:5px;background:var(--surface-2);overflow:hidden}
+.bar .fill{height:100%;border-radius:5px;background:var(--c,var(--accent))}
+.bar .n{text-align:right;font-variant-numeric:tabular-nums;color:var(--fg-2)}
+.insight{display:flex;flex-direction:column;gap:4px;padding:14px 16px;border-radius:16px;background:color-mix(in srgb,var(--cramp) 7%,var(--surface));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--cramp) 22%,transparent)}
+.insight b{font-size:15.5px}
+.insight span{color:var(--fg-2);font-size:14.5px}
+.insights{display:flex;flex-direction:column;gap:8px}
+.cmp{display:grid;grid-template-columns:7.5em 1fr;gap:4px 10px;align-items:center;font-size:13.5px}
+.cmp .lbl{color:var(--fg-2);grid-row:span 2}
+.cmp .track{height:7px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+.cmp .fill{height:100%;border-radius:4px}
+.cmp .fill.a{background:var(--cramp)}
+.cmp .fill.b{background:var(--fg-3)}
+.legend{display:flex;gap:14px;font-size:12.5px;color:var(--fg-2)}
+.legend i{display:inline-block;width:10px;height:4px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.kv{display:flex;justify-content:space-between;gap:12px;font-size:15px;padding:2px 0}
+.kv span:last-child{font-variant-numeric:tabular-nums;color:var(--fg-2);text-align:right}
+.note{font-size:13px;color:var(--fg-3);line-height:1.5}
+.progress{height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden}
+.progress i{display:block;height:100%;background:var(--accent);border-radius:3px}
+
+/* More */
+.list{display:flex;flex-direction:column;border-radius:16px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
+.li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 16px;min-height:50px}
+.li+.li{border-top:1px solid var(--line)}
+.li .t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.li .t small{color:var(--fg-2);font-size:13px}
+.x{width:30px;height:30px;border-radius:50%;background:var(--surface-2);color:var(--fg-2);font-size:18px;line-height:30px;text-align:center;flex:none}
+.stepper{display:flex;align-items:center;gap:4px;background:var(--surface-2);border-radius:12px;padding:3px;flex:none}
+.stepper button{width:38px;height:34px;border-radius:9px;font-size:20px;font-weight:500;color:var(--fg)}
+.stepper button:active{background:var(--surface-3)}
+.stepper output{min-width:3.6em;text-align:center;font-weight:600;font-variant-numeric:tabular-nums}
+.text-in{width:100%;padding:12px 14px;border-radius:12px;background:var(--surface-2);border:0;box-shadow:inset 0 0 0 1px var(--line);outline:none;font-size:16px}
+.text-in:focus{box-shadow:inset 0 0 0 1.5px var(--accent)}
+textarea.text-in{resize:vertical;min-height:84px;line-height:1.4}
+textarea.mono{font:13px/1.45 var(--mono);min-height:46vh}
+.inline{display:flex;gap:8px}
+.inline .text-in{flex:1;min-width:0}
+
+/* Tab bar */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;justify-content:center;
+  padding:6px max(8px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px));
+  background:rgba(14,15,19,.72);backdrop-filter:blur(22px) saturate(170%);-webkit-backdrop-filter:blur(22px) saturate(170%);
+  border-top:1px solid var(--line)}
+.tabbar .in{display:flex;width:100%;max-width:560px}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 0 2px;font-size:11px;font-weight:600;color:var(--fg-3);transition:color 140ms}
+.tab svg{width:24px;height:24px}
+.tab[aria-current="page"]{color:var(--accent)}
+.tab:active svg{transform:scale(.9)}
+
+/* Sheets */
+.scrim{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:opacity 280ms ease}
+.scrim.open{opacity:1;pointer-events:auto}
+.sheet{--c:var(--accent);position:fixed;left:0;right:0;bottom:0;z-index:31;margin:0 auto;max-width:600px;max-height:calc(92% - env(safe-area-inset-top,0px));
+  display:flex;flex-direction:column;border-radius:22px 22px 0 0;background:var(--surface);
+  box-shadow:0 -1px 0 var(--line-2),0 -20px 60px rgba(0,0,0,.5);
+  transform:translateY(105%);transition:transform 420ms var(--ease);visibility:hidden}
+.sheet.open{transform:translateY(0);visibility:visible}
+.sheet.dragging{transition:none}
+.sheet-grab{flex:none;padding:8px max(18px,env(safe-area-inset-right,0px)) 12px max(18px,env(safe-area-inset-left,0px));touch-action:none;cursor:grab}
+.handle{width:38px;height:5px;border-radius:3px;background:var(--surface-3);margin:0 auto 12px}
+.sheet-head{display:flex;align-items:center;gap:12px}
+.sheet-head .dot{width:12px;height:12px;border-radius:50%;background:var(--c);box-shadow:0 0 0 5px color-mix(in srgb,var(--c) 18%,transparent);flex:none}
+.sheet-head .t{flex:1;min-width:0}
+.sheet-head h3{margin:0;font-size:21px;font-weight:700;letter-spacing:-.015em}
+.sheet-head p{margin:1px 0 0;font-size:14px;color:var(--fg-2);font-variant-numeric:tabular-nums}
+.sheet-body{flex:1;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:18px;
+  padding:4px max(18px,env(safe-area-inset-right,0px)) 18px max(18px,env(safe-area-inset-left,0px))}
+.sheet-foot{flex:none;display:flex;gap:10px;padding:12px max(18px,env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) max(18px,env(safe-area-inset-left,0px));border-top:1px solid var(--line)}
+.field{display:flex;flex-direction:column;gap:8px}
+.flabel{font-size:13px;font-weight:600;color:var(--fg-2);display:flex;justify-content:space-between;gap:8px}
+.flabel em{font-style:normal;color:var(--fg-3);font-weight:500}
+.scale{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.scale button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 0 8px;border-radius:12px;background:var(--surface-2);font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--fg-2);transition:background-color 140ms,color 140ms}
+.scale button small{font-size:10.5px;font-weight:600;letter-spacing:.02em;color:var(--fg-3);min-height:1.2em}
+.scale button.on{background:color-mix(in srgb,var(--c) 30%,var(--surface-2));color:var(--fg);box-shadow:inset 0 0 0 1.5px var(--c)}
+.scale button.on small{color:var(--fg)}
+.scale button:active{transform:scale(.95)}
+.hint{font-size:13.5px;color:var(--fg-2);padding:10px 12px;border-radius:12px;background:var(--surface-2)}
+input[type="datetime-local"].text-in{min-height:46px}
+
+.toast{position:fixed;left:50%;z-index:40;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);opacity:0;pointer-events:none;
+  display:flex;align-items:center;gap:14px;max-width:calc(100% - 32px);padding:11px 12px 11px 16px;border-radius:14px;
+  background:rgba(40,44,54,.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 10px 30px rgba(0,0,0,.45);
+  font-size:15px;font-weight:500;transition:opacity 200ms ease, transform 320ms var(--ease)}
+.toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.toast button{color:var(--accent);font-weight:700;padding:4px 6px}
+.toast button:empty{display:none}
+
+@media (min-width:520px){.grid{grid-template-columns:repeat(3,1fr)}.stats{grid-template-columns:repeat(4,1fr)}}
+@media (prefers-reduced-motion:reduce){
+  .sheet{transition:opacity 200ms ease,visibility 200ms;transform:none;opacity:0}
+  .sheet.open{opacity:1}
+  .tile,.seg button,.chip,.btn,.scale button{transition:none}
+  .tile:active,.chip:active,.btn:active{transform:none}
+  .tile.flash{animation:none}
+  .toast{transition:opacity 200ms ease;transform:translate(-50%,0)}
+}
+@media (prefers-reduced-transparency:reduce){
+  .tabbar{background:#121318;backdrop-filter:none;-webkit-backdrop-filter:none}
+  .toast{background:#2a2e38;backdrop-filter:none;-webkit-backdrop-filter:none}
+}
+</style>
+</head>
+<body>
+<main>
+  <!-- LOG -->
+  <section class="view" id="view-log" aria-labelledby="h-log">
+    <div class="hero">
+      <p class="eyebrow" id="today-date">Today</p>
+      <h1 id="h-log">Log</h1>
+      <p class="sub" id="last-meal"></p>
+    </div>
+    <div id="followups" class="insights"></div>
+    <div id="groups" class="view"></div>
+  </section>
+
+  <!-- HISTORY -->
+  <section class="view" id="view-history" aria-labelledby="h-history" hidden>
+    <div class="hero">
+      <p class="eyebrow" id="hist-count">All entries</p>
+      <h1 id="h-history">History</h1>
+    </div>
+    <div class="toolbar">
+      <div class="seg" id="range-seg" role="group" aria-label="Date range">
+        <button type="button" data-range="7">7 days</button>
+        <button type="button" data-range="30" class="on">30 days</button>
+        <button type="button" data-range="90">90 days</button>
+        <button type="button" data-range="all">All</button>
+      </div>
+      <div class="chips" id="filter-chips" role="group" aria-label="Show">
+        <button type="button" class="chip on" data-filter="all">Everything</button>
+        <button type="button" class="chip" data-filter="symptom">Symptoms</button>
+        <button type="button" class="chip" data-filter="food">Food &amp; drink</button>
+        <button type="button" class="chip" data-filter="med">Medication</button>
+        <button type="button" class="chip" data-filter="body">Body</button>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn grow" id="btn-copy-log">Copy as text</button>
+        <button type="button" class="btn grow" id="btn-doctor">Doctor summary</button>
+      </div>
+    </div>
+    <div id="history-list" class="view"></div>
+  </section>
+
+  <!-- PATTERNS -->
+  <section class="view" id="view-patterns" aria-labelledby="h-patterns" hidden>
+    <div class="hero">
+      <p class="eyebrow">From your own logs</p>
+      <h1 id="h-patterns">Patterns</h1>
+    </div>
+    <div id="patterns-body" class="view"></div>
+  </section>
+
+  <!-- MORE -->
+  <section class="view" id="view-more" aria-labelledby="h-more" hidden>
+    <div class="hero">
+      <p class="eyebrow">Settings &amp; data</p>
+      <h1 id="h-more">More</h1>
+    </div>
+
+    <section class="block">
+      <h2>Medications</h2>
+      <div class="list" id="med-list"></div>
+      <div class="inline" style="margin-top:10px">
+        <input class="text-in" id="med-new" placeholder="e.g. Buscopan 10mg" autocomplete="off">
+        <button type="button" class="btn" id="med-add">Add</button>
+      </div>
+      <div class="seg" id="med-new-kind" style="margin-top:8px">
+        <button type="button" data-kind="As needed" class="on">Taken as needed</button>
+        <button type="button" data-kind="Regular">Regular daily</button>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>Patterns</h2>
+      <div class="list">
+        <div class="li"><div class="t"><span>Link meals to symptoms within</span><small>Food eaten in this window before a symptom counts toward it.</small></div>
+          <div class="stepper"><button type="button" id="win-down" aria-label="Fewer hours">−</button><output id="win-val">6 h</output><button type="button" id="win-up" aria-label="More hours">+</button></div></div>
+        <div class="li"><div class="t"><span>Saved foods</span><small id="foods-count">None yet</small></div>
+          <button type="button" class="btn" id="foods-clear">Clear</button></div>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>Backup</h2>
+      <div class="list">
+        <div class="li"><div class="t"><span>Your data stays on this phone</span><small>Copy a backup now and then and keep it somewhere safe, such as Notes or a message to yourself.</small></div></div>
+      </div>
+      <div class="btn-row" style="margin-top:10px">
+        <button type="button" class="btn grow" id="btn-backup">Copy backup</button>
+        <button type="button" class="btn grow" id="btn-restore-open">Restore</button>
+      </div>
+      <div id="restore-box" class="field" style="margin-top:10px" hidden>
+        <textarea class="text-in mono" id="restore-text" style="min-height:120px" placeholder="Paste a backup here"></textarea>
+        <div class="btn-row">
+          <label class="btn grow" for="restore-file">Choose file</label>
+          <input type="file" id="restore-file" accept=".json,.txt,application/json,text/plain" hidden>
+          <button type="button" class="btn primary grow" id="btn-restore">Restore backup</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>Try it out</h2>
+      <div class="list">
+        <div class="li"><div class="t"><span>Sample data</span><small id="sample-note">Adds two weeks of made-up entries so you can see Patterns working. Marked “Sample” and removable in one tap.</small></div>
+          <button type="button" class="btn" id="btn-sample">Add</button></div>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>Install</h2>
+      <div class="list">
+        <div class="li"><div class="t"><span>Add to Home Screen</span><small>iPhone: open this page in Safari, tap Share, then Add to Home Screen. Android: Chrome menu, then Install app.</small></div></div>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>Danger zone</h2>
+      <button type="button" class="btn danger" id="btn-wipe">Erase all data</button>
+    </section>
+    <p class="note">Cramp Logger keeps a personal record only. Patterns show what tends to happen together in your logs, not what causes it. Talk to a doctor about severe or ongoing symptoms.</p>
+  </section>
+</main>
+
+<nav class="tabbar" aria-label="Sections">
+  <div class="in">
+    <button type="button" class="tab" data-tab="log" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Log</button>
+    <button type="button" class="tab" data-tab="history">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1" fill="currentColor"/><circle cx="4.5" cy="12" r="1" fill="currentColor"/><circle cx="4.5" cy="18" r="1" fill="currentColor"/></svg>History</button>
+    <button type="button" class="tab" data-tab="patterns">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 20V12M12 20V5M19 20v-9"/></svg>Patterns</button>
+    <button type="button" class="tab" data-tab="more">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="19" cy="12" r="1.4" fill="currentColor"/></svg>More</button>
+  </div>
+</nav>
+
+<div class="scrim" id="scrim"></div>
+
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+  <div class="sheet-grab" id="sheet-grab">
+    <div class="handle"></div>
+    <div class="sheet-head">
+      <span class="dot"></span>
+      <div class="t"><h3 id="sheet-title">Entry</h3><p id="sheet-sub"></p></div>
+    </div>
+  </div>
+  <div class="sheet-body" id="sheet-body"></div>
+  <div class="sheet-foot">
+    <button type="button" class="btn danger" id="sheet-delete">Delete</button>
+    <button type="button" class="btn primary grow" id="sheet-done">Done</button>
+  </div>
+</div>
+
+<div class="sheet" id="tsheet" role="dialog" aria-modal="true" aria-labelledby="tsheet-title">
+  <div class="sheet-grab" id="tsheet-grab">
+    <div class="handle"></div>
+    <div class="sheet-head"><div class="t"><h3 id="tsheet-title">Text</h3><p id="tsheet-sub">Copy it, then paste into a message, email or note.</p></div></div>
+  </div>
+  <div class="sheet-body"><textarea class="text-in mono" id="tsheet-text" readonly></textarea></div>
+  <div class="sheet-foot">
+    <button type="button" class="btn" id="tsheet-close">Close</button>
+    <button type="button" class="btn" id="tsheet-share" hidden>Share</button>
+    <button type="button" class="btn primary grow" id="tsheet-copy">Copy</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"><span id="toast-text"></span><button type="button" id="toast-btn"></button></div>
+
+<script>
+(() => {
+'use strict';
+const H = 36e5, DAY = 864e5, KEY = 'cramplogger.v1';
+
+const TYPES = {
+  cramps:   {label:'Cramps', cat:'symptom', c:'--cramp'},
+  severe:   {label:'Severe cramps', cat:'symptom', c:'--severe'},
+  nausea:   {label:'Nausea', cat:'symptom', c:'--nausea'},
+  morning:  {label:'Morning irritation', cat:'symptom', c:'--morning', long:'Morning stomach irritation'},
+  meal:     {label:'Meal', cat:'food', c:'--food'},
+  coffee:   {label:'Coffee', cat:'food', c:'--coffee'},
+  alcohol:  {label:'Alcohol', cat:'food', c:'--alcohol'},
+  water:    {label:'Water', cat:'food', c:'--water'},
+  med:      {label:'Medication', cat:'med', c:'--med'},
+  bowel:    {label:'Bowel movement', cat:'body', c:'--body'},
+  sleep:    {label:'Sleep', cat:'body', c:'--body'},
+  stress:   {label:'Stress', cat:'body', c:'--body'},
+  exercise: {label:'Exercise', cat:'body', c:'--body'},
+};
+const SYMPTOMS = ['cramps','severe','nausea','morning'];
+const GUT = ['cramps','severe','nausea'];
+const GROUPS = [
+  ['Symptoms', ['cramps','severe','nausea','morning'], 'sym'],
+  ['Food & drink', ['meal','coffee','alcohol','water']],
+  ['Medication & body', ['med','bowel','sleep','stress','exercise']],
+];
+const TAGS = ['Dairy','Gluten / wheat','Spicy','Greasy / fried','Onion / garlic','Sugary','Red meat','Beans / lentils','Fizzy drink','Takeaway'];
+const SEV = ['', 'Mild', '', 'Moderate', '', 'Worst'];
+
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const pct = x => Math.round(x * 100) + '%';
+const label = t => TYPES[t].label;
+const haptic = () => { try { navigator.vibrate && navigator.vibrate(8); } catch (e) {} };
+
+/* ---------- storage ---------- */
+const blank = () => ({v:1, entries:[], meds:[], foods:{}, settings:{window:6}});
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const s = JSON.parse(raw), b = blank();
+      return Object.assign(b, s, {settings: Object.assign(b.settings, s.settings || {})});
+    }
+  } catch (e) {}
+  return blank();
+}
+let state = load();
+let storageOk = true;
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(state)); storageOk = true; }
+  catch (e) { if (storageOk) toast("Couldn't save. This browser is blocking storage."); storageOk = false; }
+}
+try { navigator.storage && navigator.storage.persist && navigator.storage.persist().catch(() => {}); } catch (e) {}
+
+/* ---------- time helpers ---------- */
+const fmtTime = t => new Date(t).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+const dayKey = t => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
+const keyToDate = k => { const [y,m,d] = k.split('-').map(Number); return new Date(y, m-1, d); };
+const prevKey = k => { const d = keyToDate(k); d.setDate(d.getDate()-1); return dayKey(d); };
+const startOfDay = t => { const d = new Date(t); d.setHours(0,0,0,0); return d.getTime(); };
+function dayLabel(t) {
+  const k = dayKey(t), today = dayKey(Date.now());
+  if (k === today) return 'Today';
+  if (k === prevKey(today)) return 'Yesterday';
+  return new Date(t).toLocaleDateString([], {weekday:'short', day:'numeric', month:'short'});
+}
+const dayShort = t => new Date(t).toLocaleDateString([], {weekday:'short', day:'numeric', month:'short'});
+const dayLong = t => new Date(t).toLocaleDateString([], {weekday:'long', day:'numeric', month:'long'});
+const toLocalInput = t => new Date(t - new Date(t).getTimezoneOffset()*6e4).toISOString().slice(0,16);
+function dur(ms) {
+  const m = Math.max(0, Math.round(ms/6e4));
+  if (m < 60) return m + ' min';
+  const h = Math.floor(m/60), r = m % 60;
+  if (h < 24) return r ? `${h} h ${r} min` : `${h} h`;
+  return `${Math.floor(h/24)} d ${h%24} h`;
+}
+const hr1 = x => (Math.round(x*10)/10).toString().replace(/\.0$/,'') + ' h';
+const median = a => { if (!a.length) return null; const s = [...a].sort((x,y)=>x-y), i = s.length>>1; return s.length%2 ? s[i] : (s[i-1]+s[i])/2; };
+function guessMealType(t) {
+  const h = new Date(t).getHours() + new Date(t).getMinutes()/60;
+  if (h >= 4.5 && h < 10.5) return 'Breakfast';
+  if (h >= 11 && h < 15) return 'Lunch';
+  if (h >= 17 && h < 22) return 'Dinner';
+  return 'Snack';
+}
+
+/* ---------- entry text ---------- */
+function details(e) {
+  const p = [];
+  switch (e.type) {
+    case 'cramps': case 'severe': case 'nausea': case 'morning':
+      if (e.sev) p.push(`${e.sev}/5`); break;
+    case 'meal':
+      if (e.food) p.push(e.food);
+      if (e.mealType) p.push(e.mealType.toLowerCase());
+      if (e.portion && e.portion !== 'Normal') p.push(e.portion.toLowerCase() + ' portion');
+      if (e.tags && e.tags.length) p.push(e.tags.join(', '));
+      break;
+    case 'alcohol': if (e.count) p.push(e.count + (e.count === 1 ? ' drink' : ' drinks')); break;
+    case 'water': if (e.count) p.push(e.count + (e.count === 1 ? ' glass' : ' glasses')); break;
+    case 'med':
+      if (e.med) p.push(e.med);
+      if (e.kind) p.push(e.kind.toLowerCase());
+      if (e.helped && e.helped !== 'Skip') p.push('helped: ' + e.helped.toLowerCase());
+      break;
+    case 'bowel': if (e.kind) p.push(e.kind.toLowerCase()); break;
+    case 'sleep': if (e.hours != null) p.push(hr1(e.hours)); if (e.quality) p.push(`quality ${e.quality}/5`); break;
+    case 'stress': if (e.level) p.push(`${e.level}/5`); break;
+    case 'exercise': if (e.mins) p.push(e.mins + ' min'); break;
+  }
+  if (e.note) p.push(`“${e.note}”`);
+  return p;
+}
+
+/* ---------- data access ---------- */
+const sorted = () => [...state.entries].sort((a,b) => a.t - b.t);
+const byId = id => state.entries.find(e => e.id === id);
+function removeEntry(e) { state.entries = state.entries.filter(x => x !== e); save(); }
+function restoreEntry(e) { if (!byId(e.id)) state.entries.push(e); save(); }
+
+/* ---------- toast ---------- */
+let toastTimer = null, toastFn = null;
+function toast(text, action, fn) {
+  $('#toast-text').textContent = text;
+  $('#toast-btn').textContent = action || '';
+  toastFn = fn || null;
+  $('#toast').classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $('#toast').classList.remove('show'), action ? 5000 : 2600);
+}
+$('#toast-btn').addEventListener('click', () => { const f = toastFn; toastFn = null; $('#toast').classList.remove('show'); if (f) f(); });
+
+/* ---------- tabs ---------- */
+const TABS = ['log','history','patterns','more'];
+let tab = 'log';
+function setTab(t, push = true) {
+  if (!TABS.includes(t)) t = 'log';
+  tab = t;
+  TABS.forEach(x => { $('#view-' + x).hidden = x !== t; });
+  $$('.tab').forEach(b => { if (b.dataset.tab === t) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); });
+  if (push) { try { history.replaceState(null, '', '#' + t); } catch (e) {} }
+  render();
+  window.scrollTo(0, 0);
+}
+$$('.tab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+window.addEventListener('hashchange', () => setTab(location.hash.slice(1), false));
+
+function render() {
+  if (tab === 'log') renderLog();
+  if (tab === 'history') renderHistory();
+  if (tab === 'patterns') renderPatterns();
+  if (tab === 'more') renderMore();
+}
+
+/* ---------- LOG ---------- */
+function buildTiles() {
+  $('#groups').innerHTML = GROUPS.map(([name, types, cls]) => `
+    <section class="block"><h2>${esc(name)}</h2><div class="grid">
+      ${types.map(t => `<button type="button" class="tile ${cls || ''}" data-type="${t}" style="--c:var(${TYPES[t].c})">
+        <span class="dot"></span><span class="tile-text"><span class="tile-label">${esc(label(t))}</span><span class="tile-meta"></span></span>
+      </button>`).join('')}
+    </div></section>`).join('');
+  $$('#groups .tile').forEach(b => b.addEventListener('click', () => quickLog(b.dataset.type, b)));
+}
+function renderLog() {
+  $('#today-date').textContent = dayLong(Date.now());
+  const now = Date.now();
+  const all = sorted();
+  const lastMeal = all.filter(e => e.type === 'meal' && e.t <= now).pop();
+  $('#last-meal').innerHTML = lastMeal
+    ? `Last meal <b>${dur(now - lastMeal.t)}</b> ago${lastMeal.food ? ' · ' + esc(lastMeal.food) : ''}`
+    : 'Tap a button the moment something happens. Add detail after.';
+  const today = dayKey(now);
+  $$('#groups .tile').forEach(b => {
+    const todays = all.filter(e => e.type === b.dataset.type && dayKey(e.t) === today);
+    const meta = b.querySelector('.tile-meta');
+    if (todays.length) {
+      meta.textContent = `${todays.length} today · last ${fmtTime(todays[todays.length-1].t)}`;
+      b.classList.add('has');
+    } else { meta.textContent = 'Not today'; b.classList.remove('has'); }
+  });
+  // medication follow-ups
+  const due = all.filter(e => e.type === 'med' && e.kind === 'As needed' && !e.helped && now - e.t > 45*6e4 && now - e.t < DAY);
+  $('#followups').innerHTML = due.map(e => `
+    <div class="follow" data-id="${e.id}">
+      <p>Did ${esc(e.med || 'your medication')} help?<small>Taken ${dayLabel(e.t).toLowerCase()} at ${fmtTime(e.t)}</small></p>
+      <div class="seg">${['Yes','A bit','No','Skip'].map(v => `<button type="button" data-helped="${v}">${v}</button>`).join('')}</div>
+    </div>`).join('');
+  $$('#followups [data-helped]').forEach(b => b.addEventListener('click', () => {
+    const e = byId(b.closest('.follow').dataset.id);
+    if (e) { e.helped = b.dataset.helped; save(); haptic(); renderLog(); if (b.dataset.helped !== 'Skip') toast('Saved'); }
+  }));
+}
+function quickLog(type, el) {
+  const e = {id: uid(), type, t: Date.now()};
+  if (type === 'meal') { e.mealType = guessMealType(e.t); e.portion = 'Normal'; e.tags = []; }
+  if (type === 'alcohol' || type === 'water') e.count = 1;
+  if (type === 'med') {
+    e.kind = 'As needed';
+    if (state.meds.length === 1) { e.med = state.meds[0].name; e.kind = state.meds[0].kind || 'As needed'; }
+  }
+  if (type === 'sleep') e.hours = 7;
+  if (type === 'exercise') e.mins = 30;
+  state.entries.push(e);
+  save(); haptic();
+  if (el) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+  render();
+  openSheet(e, true);
+}
+
+/* ---------- entry sheet ---------- */
+let cur = null, curNew = false, delArmed = false;
+const sheet = $('#sheet'), tsheet = $('#tsheet'), scrim = $('#scrim');
+let openSheetEl = null;
+
+function scaleField(field, val, title, words = SEV) {
+  return `<div class="field"><div class="flabel">${title}<em>Optional</em></div><div class="scale">${[1,2,3,4,5].map(n =>
+    `<button type="button" data-num="${field}" data-val="${n}" class="${val === n ? 'on' : ''}">${n}<small>${words[n] || ''}</small></button>`).join('')}</div></div>`;
+}
+function segField(field, opts, val, title, opt = true) {
+  return `<div class="field"><div class="flabel">${title}${opt ? '<em>Optional</em>' : ''}</div><div class="seg">${opts.map(o =>
+    `<button type="button" data-seg="${field}" data-val="${esc(o)}" class="${val === o ? 'on' : ''}">${esc(o)}</button>`).join('')}</div></div>`;
+}
+function stepField(field, val, title, unit, step, min, max) {
+  return `<div class="field"><div class="flabel">${title}</div><div class="inline" style="align-items:center;justify-content:space-between">
+    <span class="muted" style="font-size:14px">${unit}</span>
+    <div class="stepper"><button type="button" data-step="${field}" data-d="${-step}" data-min="${min}" data-max="${max}" aria-label="Less">−</button>
+    <output>${val ?? min}</output>
+    <button type="button" data-step="${field}" data-d="${step}" data-min="${min}" data-max="${max}" aria-label="More">+</button></div></div></div>`;
+}
+function fieldsFor(e) {
+  const out = [];
+  const all = sorted();
+  switch (e.type) {
+    case 'cramps': case 'severe': case 'nausea': case 'morning':
+      out.push(scaleField('sev', e.sev, 'How bad is it?'));
+      {
+        const lm = all.filter(m => m.type === 'meal' && m.t <= e.t).pop();
+        if (lm) out.push(`<div class="hint">${dur(e.t - lm.t)} since your last meal${lm.food ? ' (' + esc(lm.food) + ')' : ''}.</div>`);
+      }
+      break;
+    case 'meal': {
+      const foods = Object.values(state.foods).sort((a,b) => (b.n - a.n) || (b.last - a.last)).slice(0, 10);
+      out.push(`<div class="field"><label class="flabel" for="f-food">What did you eat?</label>
+        <input class="text-in" id="f-food" data-input="food" value="${esc(e.food || '')}" placeholder="e.g. chicken wrap, flat white" autocomplete="off" enterkeyhint="done">
+        ${foods.length ? `<div class="chips">${foods.map(f => `<button type="button" class="chip ${e.food && e.food.toLowerCase() === f.name.toLowerCase() ? 'on' : ''}" data-food="${esc(f.name)}">${esc(f.name)}</button>`).join('')}</div>` : ''}
+      </div>`);
+      out.push(segField('mealType', ['Breakfast','Lunch','Dinner','Snack'], e.mealType, 'Meal'));
+      out.push(segField('portion', ['Small','Normal','Big'], e.portion, 'Portion'));
+      out.push(`<div class="field"><div class="flabel">Contains<em>Helps spot triggers</em></div><div class="chips">${TAGS.map(t =>
+        `<button type="button" class="chip ${(e.tags || []).includes(t) ? 'on' : ''}" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}</div></div>`);
+      const prev = all.filter(m => m.type === 'meal' && m.t < e.t && m !== e).pop();
+      if (prev) out.push(`<div class="hint">${dur(e.t - prev.t)} since your previous meal.</div>`);
+      break;
+    }
+    case 'coffee': {
+      const lm = all.filter(m => m.type === 'meal' && m.t <= e.t).pop();
+      const empty = !lm || e.t - lm.t > 3*H;
+      out.push(`<div class="hint">${empty ? 'Empty stomach: no food logged in the 3 hours before this.' : 'You ate ' + dur(e.t - lm.t) + ' before this.'}</div>`);
+      break;
+    }
+    case 'alcohol': out.push(stepField('count', e.count, 'How many drinks?', 'Standard drinks', 1, 1, 20)); break;
+    case 'water': out.push(stepField('count', e.count, 'How much?', 'Glasses', 1, 1, 20)); break;
+    case 'med': {
+      out.push(`<div class="field"><label class="flabel" for="f-med">Which medication?</label>
+        <input class="text-in" id="f-med" data-input="med" value="${esc(e.med || '')}" placeholder="Name and dose, e.g. Buscopan 10mg" autocomplete="off" enterkeyhint="done">
+        ${state.meds.length ? `<div class="chips">${state.meds.map(m => `<button type="button" class="chip ${e.med === m.name ? 'on' : ''}" data-med="${esc(m.name)}">${esc(m.name)}</button>`).join('')}</div>` : ''}
+      </div>`);
+      out.push(segField('kind', ['As needed','Regular'], e.kind, 'Why', false));
+      if (e.kind === 'As needed') out.push(segField('helped', ['Yes','A bit','No'], e.helped, curNew ? 'Did it help? (I’ll ask again in an hour)' : 'Did it help?'));
+      break;
+    }
+    case 'bowel': out.push(segField('kind', ['Normal','Loose','Hard'], e.kind, 'Type')); break;
+    case 'sleep':
+      out.push(stepField('hours', e.hours, 'How long did you sleep?', 'Hours', 0.5, 0, 16));
+      out.push(scaleField('quality', e.quality, 'How well?', ['', 'Awful', '', 'OK', '', 'Great']));
+      break;
+    case 'stress': out.push(scaleField('level', e.level, 'Stress level', ['', 'Calm', '', 'Some', '', 'Very'])); break;
+    case 'exercise': out.push(stepField('mins', e.mins, 'How long?', 'Minutes', 5, 5, 300)); break;
+  }
+  out.push(`<div class="field"><label class="flabel" for="f-time">When</label>
+    <input class="text-in" type="datetime-local" id="f-time" value="${toLocalInput(e.t)}"></div>`);
+  out.push(`<div class="field"><label class="flabel" for="f-note">Note<em>Optional</em></label>
+    <textarea class="text-in" id="f-note" data-input="note" placeholder="Anything worth remembering">${esc(e.note || '')}</textarea></div>`);
+  return out.join('');
+}
+function renderSheet() {
+  const e = cur;
+  sheet.style.setProperty('--c', `var(${TYPES[e.type].c})`);
+  $('#sheet-title').textContent = label(e.type);
+  updateSheetSub();
+  $('#sheet-body').innerHTML = fieldsFor(e);
+  const del = $('#sheet-delete');
+  del.textContent = curNew ? 'Undo' : 'Delete';
+}
+function updateSheetSub() {
+  $('#sheet-sub').textContent = (curNew ? 'Logged ' : '') + dayLabel(cur.t) + ' at ' + fmtTime(cur.t);
+}
+function openSheet(e, isNew) {
+  cur = e; curNew = isNew; delArmed = false;
+  renderSheet();
+  $('#sheet-body').scrollTop = 0;
+  show(sheet);
+}
+function show(el) {
+  openSheetEl = el;
+  $('#toast').classList.remove('show');
+  el.style.transform = '';
+  el.classList.add('open');
+  scrim.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function hide(el) {
+  el.classList.remove('open', 'dragging');
+  el.style.transform = '';
+  scrim.classList.remove('open');
+  document.body.style.overflow = '';
+  openSheetEl = null;
+  if (document.activeElement && el.contains(document.activeElement)) document.activeElement.blur();
+}
+function commitAndClose() {
+  if (!cur) return hide(sheet);
+  const e = cur;
+  ['food','med','note'].forEach(k => { if (typeof e[k] === 'string') { e[k] = e[k].trim(); if (!e[k]) delete e[k]; } });
+  if (e.type === 'meal' && e.food) {
+    const k = e.food.toLowerCase();
+    const f = state.foods[k] || {name: e.food, n: 0};
+    f.name = e.food; f.tags = [...(e.tags || [])]; f.last = Date.now();
+    if (!f.ids) f.ids = [];
+    if (!f.ids.includes(e.id)) { f.ids.push(e.id); f.n = f.ids.length; if (f.ids.length > 50) f.ids = f.ids.slice(-50); }
+    state.foods[k] = f;
+  }
+  if (e.type === 'med' && e.med && !state.meds.some(m => m.name.toLowerCase() === e.med.toLowerCase())) {
+    state.meds.push({name: e.med, kind: e.kind || 'As needed'});
+  }
+  save();
+  const wasNew = curNew;
+  cur = null;
+  hide(sheet);
+  render();
+  if (wasNew) toast(`Logged ${label(e.type)} · ${fmtTime(e.t)}`, 'Undo', () => { removeEntry(e); render(); toast('Removed'); });
+}
+$('#sheet-done').addEventListener('click', commitAndClose);
+$('#sheet-delete').addEventListener('click', () => {
+  const e = cur;
+  if (curNew) { removeEntry(e); cur = null; hide(sheet); render(); toast(`${label(e.type)} removed`); return; }
+  if (!delArmed) { delArmed = true; $('#sheet-delete').textContent = 'Tap again to delete'; return; }
+  removeEntry(e); cur = null; hide(sheet); render();
+  toast('Entry deleted', 'Undo', () => { restoreEntry(e); render(); });
+});
+scrim.addEventListener('click', () => { if (openSheetEl === sheet) commitAndClose(); else if (openSheetEl) hide(openSheetEl); });
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && openSheetEl) { if (openSheetEl === sheet) commitAndClose(); else hide(openSheetEl); } });
+
+$('#sheet-body').addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b || !cur) return;
+  const e = cur;
+  if (b.dataset.num) { const f = b.dataset.num, v = Number(b.dataset.val); if (e[f] === v) delete e[f]; else e[f] = v; }
+  else if (b.dataset.seg) { const f = b.dataset.seg, v = b.dataset.val; if (e[f] === v && !['kind','mealType'].includes(f)) delete e[f]; else e[f] = v; if (f === 'kind' && v !== 'As needed') delete e.helped; }
+  else if (b.dataset.tag) { const t = b.dataset.tag; e.tags = e.tags || []; e.tags = e.tags.includes(t) ? e.tags.filter(x => x !== t) : [...e.tags, t]; }
+  else if (b.dataset.step) {
+    const f = b.dataset.step, d = Number(b.dataset.d), mn = Number(b.dataset.min), mx = Number(b.dataset.max);
+    e[f] = Math.min(mx, Math.max(mn, (e[f] ?? mn) + d));
+    b.parentElement.querySelector('output').textContent = e[f];
+    save(); haptic(); return;
+  }
+  else if (b.dataset.food) {
+    const f = state.foods[b.dataset.food.toLowerCase()];
+    e.food = b.dataset.food; if (f && f.tags) e.tags = [...f.tags];
+  }
+  else if (b.dataset.med) {
+    e.med = b.dataset.med; const m = state.meds.find(x => x.name === e.med); if (m && m.kind) e.kind = m.kind;
+    if (e.kind !== 'As needed') delete e.helped;
+  }
+  else return;
+  save(); haptic();
+  const st = $('#sheet-body').scrollTop;
+  $('#sheet-body').innerHTML = fieldsFor(e);
+  $('#sheet-body').scrollTop = st;
+});
+$('#sheet-body').addEventListener('input', ev => {
+  const el = ev.target; if (!cur) return;
+  if (el.dataset.input) { cur[el.dataset.input] = el.value; save(); }
+});
+$('#sheet-body').addEventListener('change', ev => {
+  const el = ev.target; if (!cur) return;
+  if (el.id === 'f-time' && el.value) {
+    const t = new Date(el.value).getTime();
+    if (!isNaN(t)) { cur.t = t; save(); updateSheetSub(); }
+  }
+});
+
+/* ---------- sheet drag-to-dismiss with momentum ---------- */
+function attachDrag(grab, el, onClose) {
+  let d = null;
+  const project = v => (v/1000) * 0.998 / (1 - 0.998);
+  grab.addEventListener('pointerdown', ev => {
+    if (ev.button !== 0 && ev.pointerType === 'mouse') return;
+    d = {y0: ev.clientY, y: 0, hist: [[ev.timeStamp, ev.clientY]], id: ev.pointerId};
+    grab.setPointerCapture(ev.pointerId);
+    el.classList.add('dragging');
+  });
+  grab.addEventListener('pointermove', ev => {
+    if (!d) return;
+    const dy = ev.clientY - d.y0;
+    d.y = dy < 0 ? -(-dy * 60) / (60 + -dy) : dy;  // rubber-band upward
+    el.style.transform = `translateY(${d.y}px)`;
+    d.hist.push([ev.timeStamp, ev.clientY]); if (d.hist.length > 6) d.hist.shift();
+  });
+  const end = () => {
+    if (!d) return;
+    const [t0, y0] = d.hist[0], [t1, y1] = d.hist[d.hist.length-1];
+    const v = t1 > t0 ? (y1 - y0) / (t1 - t0) * 1000 : 0;
+    const projected = d.y + project(v);
+    el.classList.remove('dragging');
+    if (d.y > 8 && projected > el.offsetHeight * 0.45) onClose();
+    else el.style.transform = '';
+    d = null;
+  };
+  grab.addEventListener('pointerup', end);
+  grab.addEventListener('pointercancel', end);
+}
+attachDrag($('#sheet-grab'), sheet, commitAndClose);
+attachDrag($('#tsheet-grab'), tsheet, () => hide(tsheet));
+
+/* ---------- text sheet (copy / share) ---------- */
+function openText(title, text) {
+  $('#tsheet-title').textContent = title;
+  $('#tsheet-text').value = text;
+  $('#tsheet-copy').textContent = 'Copy';
+  show(tsheet);
+  $('#tsheet-text').scrollTop = 0;
+}
+const canShare = (() => { try { return !!navigator.share && window.self === window.top; } catch (e) { return false; } })();
+$('#tsheet-share').hidden = !canShare;
+$('#tsheet-close').addEventListener('click', () => hide(tsheet));
+$('#tsheet-copy').addEventListener('click', () => {
+  const ta = $('#tsheet-text'), text = ta.value;
+  const fallback = () => { ta.focus(); ta.select(); ta.setSelectionRange(0, text.length); let ok = false; try { ok = document.execCommand('copy'); } catch (e) {} done(ok); };
+  const done = ok => { $('#tsheet-copy').textContent = ok ? 'Copied' : 'Text selected. Copy it'; if (ok) { haptic(); toast('Copied. Paste it into a message.'); } };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => done(true), fallback);
+    else fallback();
+  } catch (e) { fallback(); }
+});
+$('#tsheet-share').addEventListener('click', () => {
+  try { navigator.share({title: $('#tsheet-title').textContent, text: $('#tsheet-text').value}).catch(() => {}); } catch (e) {}
+});
+
+/* ---------- HISTORY ---------- */
+let hFilter = 'all', range = '30';
+const rangeStart = () => range === 'all' ? -Infinity : startOfDay(Date.now()) - (Number(range) - 1) * DAY;
+const inRange = e => e.t >= rangeStart();
+const rangeName = () => range === 'all' ? 'All time' : `Last ${range} days`;
+$$('#range-seg button').forEach(b => b.addEventListener('click', () => {
+  range = b.dataset.range; $$('#range-seg button').forEach(x => x.classList.toggle('on', x === b)); renderHistory();
+}));
+$$('#filter-chips .chip').forEach(b => b.addEventListener('click', () => {
+  hFilter = b.dataset.filter; $$('#filter-chips .chip').forEach(x => x.classList.toggle('on', x === b)); renderHistory();
+}));
+function renderHistory() {
+  const list = state.entries.filter(e => inRange(e) && (hFilter === 'all' || TYPES[e.type].cat === hFilter)).sort((a,b) => b.t - a.t);
+  $('#hist-count').textContent = `${list.length} ${list.length === 1 ? 'entry' : 'entries'} · ${rangeName().toLowerCase()}`;
+  if (!list.length) {
+    $('#history-list').innerHTML = `<div class="empty"><strong>Nothing logged here yet</strong>Entries appear here as soon as you tap a button on the Log tab.</div>`;
+    return;
+  }
+  const days = new Map();
+  list.forEach(e => { const k = dayKey(e.t); if (!days.has(k)) days.set(k, []); days.get(k).push(e); });
+  $('#history-list').innerHTML = [...days.values()].map(es => {
+    const nSym = es.filter(e => TYPES[e.type].cat === 'symptom').length;
+    return `<div class="day"><div class="day-h"><span>${esc(dayLabel(es[0].t))}</span><span class="muted">${nSym ? nSym + (nSym === 1 ? ' symptom' : ' symptoms') : ''}</span></div>
+      <div class="rows">${es.map(e => `<button type="button" class="row" data-id="${e.id}" style="--c:var(${TYPES[e.type].c})">
+        <span class="r-time">${fmtTime(e.t)}</span><span class="dot"></span>
+        <span class="r-main"><span class="r-label">${esc(label(e.type))}${e.sample ? '<span class="pill">Sample</span>' : ''}</span>
+        ${details(e).length ? `<span class="r-det">${esc(details(e).join(' · '))}</span>` : ''}</span></button>`).join('')}</div></div>`;
+  }).join('');
+}
+$('#history-list').addEventListener('click', ev => {
+  const r = ev.target.closest('.row'); if (!r) return;
+  const e = byId(r.dataset.id); if (e) openSheet(e, false);
+});
+$('#btn-copy-log').addEventListener('click', () => openText('Your log', logText()));
+$('#btn-doctor').addEventListener('click', () => openText('Doctor summary', doctorText()));
+
+function rangeHeader(list) {
+  if (!list.length) return rangeName();
+  const a = list[0].t, b = Math.max(Date.now(), list[list.length-1].t);
+  const n = Math.round((startOfDay(b) - startOfDay(range === 'all' ? a : rangeStart())) / DAY) + 1;
+  const from = range === 'all' ? a : rangeStart();
+  return `${new Date(from).toLocaleDateString([], {day:'numeric', month:'short', year:'numeric'})} to ${new Date(b).toLocaleDateString([], {day:'numeric', month:'short', year:'numeric'})} (${n} days)`;
+}
+function logText() {
+  const list = state.entries.filter(e => inRange(e) && (hFilter === 'all' || TYPES[e.type].cat === hFilter)).sort((a,b) => b.t - a.t);
+  const lines = ['Stomach log', rangeHeader([...list].reverse()), ''];
+  if (!list.length) lines.push('No entries.');
+  let day = null;
+  list.forEach(e => {
+    const k = dayKey(e.t);
+    if (k !== day) { if (day) lines.push(''); lines.push(dayShort(e.t)); day = k; }
+    const d = details(e);
+    lines.push(`  ${fmtTime(e.t).padEnd(8)} ${label(e.type)}${d.length ? ' – ' + d.join(', ') : ''}`);
+  });
+  return lines.join('\n');
+}
+function doctorText() {
+  const list = state.entries.filter(inRange).sort((a,b) => a.t - b.t);
+  const L = ['Stomach symptom summary', rangeHeader(list), ''];
+  const syms = list.filter(e => SYMPTOMS.includes(e.type));
+  L.push('SYMPTOMS');
+  SYMPTOMS.forEach(t => {
+    const s = syms.filter(e => e.type === t);
+    const sev = s.filter(e => e.sev).map(e => e.sev);
+    const avg = sev.length ? `, average severity ${(sev.reduce((a,b)=>a+b,0)/sev.length).toFixed(1)}/5` : '';
+    L.push(`- ${TYPES[t].long || label(t)}: ${s.length} ${s.length === 1 ? 'time' : 'times'}${avg}`);
+  });
+  const tod = timeOfDay(syms);
+  const top = tod.filter(b => b.n).sort((a,b) => b.n - a.n)[0];
+  if (top && syms.length >= 3) L.push(`- Most often: ${top.name.toLowerCase()} (${top.n} of ${syms.length})`);
+  L.push('');
+
+  const meds = medStats(list);
+  if (meds.length) {
+    L.push('MEDICATION');
+    meds.forEach(m => {
+      const r = m.yes + m.abit + m.no;
+      L.push(`- ${m.name}: taken ${m.n} ${m.n === 1 ? 'time' : 'times'}${m.kind ? ' (' + m.kind.toLowerCase() + ')' : ''}${r ? `. Helped: yes ${m.yes}, a bit ${m.abit}, no ${m.no}` : ''}`);
+    });
+    L.push('');
+  }
+
+  const meals = list.filter(e => e.type === 'meal');
+  const gaps = []; for (let i = 1; i < meals.length; i++) { const g = (meals[i].t - meals[i-1].t)/H; if (g < 20) gaps.push(g); }
+  const sleeps = list.filter(e => e.type === 'sleep' && e.hours != null).map(e => e.hours);
+  const stress = list.filter(e => e.type === 'stress' && e.level).map(e => e.level);
+  const drinks = list.filter(e => e.type === 'alcohol').reduce((a,e) => a + (e.count || 1), 0);
+  const coffee = list.filter(e => e.type === 'coffee').length;
+  const habit = [];
+  if (meals.length) habit.push(`- Meals logged: ${meals.length}${gaps.length ? `, typical gap between meals ${hr1(median(gaps))}` : ''}`);
+  if (coffee) habit.push(`- Coffees: ${coffee}`);
+  if (drinks) habit.push(`- Alcoholic drinks: ${drinks}`);
+  if (sleeps.length) habit.push(`- Sleep: average ${hr1(sleeps.reduce((a,b)=>a+b,0)/sleeps.length)} a night (${sleeps.length} nights logged)`);
+  if (stress.length) habit.push(`- Stress: average ${(stress.reduce((a,b)=>a+b,0)/stress.length).toFixed(1)}/5`);
+  if (habit.length) { L.push('EATING & HABITS'); L.push(...habit); L.push(''); }
+
+  const a = analyze(list);
+  if (a.patterns.length) {
+    L.push('POSSIBLE PATTERNS (from my own logs, not a diagnosis)');
+    a.patterns.forEach(p => L.push(`- ${p.text}`));
+    L.push('');
+  }
+
+  L.push('SYMPTOM LOG');
+  if (!syms.length) L.push('No symptoms logged in this period.');
+  const allMeals = sorted().filter(e => e.type === 'meal');
+  let day = null;
+  syms.forEach(e => {
+    const k = dayKey(e.t);
+    if (k !== day) { L.push(dayShort(e.t)); day = k; }
+    const lm = allMeals.filter(m => m.t <= e.t).pop();
+    const parts = [];
+    if (e.sev) parts.push(`${e.sev}/5`);
+    if (lm && e.t - lm.t < 36*H) parts.push(`${dur(e.t - lm.t)} after eating${lm.food ? ' ' + lm.food : ''}`);
+    if (e.note) parts.push(`“${e.note}”`);
+    L.push(`  ${fmtTime(e.t).padEnd(8)} ${TYPES[e.type].long || label(e.type)}${parts.length ? ' – ' + parts.join(', ') : ''}`);
+  });
+  return L.join('\n');
+}
+
+/* ---------- analysis ---------- */
+function timeOfDay(syms) {
+  const b = [
+    {name:'Early morning', sub:'5–9 am', test:h => h >= 5 && h < 9},
+    {name:'Late morning', sub:'9–12', test:h => h >= 9 && h < 12},
+    {name:'Afternoon', sub:'12–5 pm', test:h => h >= 12 && h < 17},
+    {name:'Evening', sub:'5–9 pm', test:h => h >= 17 && h < 21},
+    {name:'Night', sub:'9 pm–5 am', test:h => h >= 21 || h < 5},
+  ];
+  b.forEach(x => x.n = syms.filter(s => x.test(new Date(s.t).getHours())).length);
+  return b;
+}
+function medStats(list) {
+  const m = new Map();
+  list.filter(e => e.type === 'med').forEach(e => {
+    const name = e.med || 'Unnamed medication', k = name.toLowerCase();
+    if (!m.has(k)) m.set(k, {name, n:0, yes:0, abit:0, no:0, kind:e.kind});
+    const s = m.get(k); s.n++;
+    if (e.helped === 'Yes') s.yes++; else if (e.helped === 'A bit') s.abit++; else if (e.helped === 'No') s.no++;
+  });
+  return [...m.values()].sort((a,b) => b.n - a.n);
+}
+function analyze(entries) {
+  const win = state.settings.window, W = win * H;
+  const all = [...entries].sort((a,b) => a.t - b.t);
+  const meals = all.filter(e => e.type === 'meal');
+  const syms = all.filter(e => SYMPTOMS.includes(e.type));
+  const gut = syms.filter(e => GUT.includes(e.type));
+  const lastMeal = t => { let r = null; for (const m of meals) { if (m.t <= t) r = m; else break; } return r; };
+  const mealsIn = (t, w) => meals.filter(m => m.t <= t && m.t > t - w);
+  const gapOf = s => { const m = lastMeal(s.t); return m && s.t - m.t < 48*H ? (s.t - m.t)/H : null; };
+  const res = {patterns: [], tags: [], gaps: {}, within: null, n: syms.length, gutN: gut.length, meals: meals.length};
+
+  SYMPTOMS.forEach(t => { res.gaps[t] = syms.filter(s => s.type === t).map(gapOf).filter(x => x != null); });
+
+  if (gut.length >= 3 && meals.length) {
+    const w = gut.filter(s => mealsIn(s.t, W).length).length;
+    res.within = {hits: w, n: gut.length};
+  }
+  // long gaps without food
+  const gg = gut.map(gapOf).filter(x => x != null);
+  if (gg.length >= 3) {
+    const long = gg.filter(g => g >= 5).length;
+    if (long >= 2 && long / gg.length >= 0.5)
+      res.patterns.push({score: long/gg.length, title:'Long gaps without food', text:`${long} of ${gg.length} cramp or nausea episodes came 5 or more hours after your last meal.`});
+  }
+  // food tags
+  if (gut.length >= 3 && meals.length >= 3) {
+    TAGS.forEach(tag => {
+      const hits = gut.filter(s => mealsIn(s.t, W).some(m => (m.tags || []).includes(tag))).length;
+      const base = meals.filter(m => (m.tags || []).includes(tag)).length / meals.length;
+      const share = hits / gut.length;
+      if (hits || base) res.tags.push({tag, hits, share, base});
+      if (hits >= 2 && share >= 0.4 && share >= base + 0.15)
+        res.patterns.push({score: share - base + 0.1, title: tag, text:`${tag} was in a meal within ${win} hours before ${hits} of ${gut.length} cramp or nausea episodes. It’s in ${pct(base)} of all your meals.`});
+    });
+    res.tags.sort((a,b) => (b.share - b.base) - (a.share - a.base));
+    // specific foods
+    const byName = new Map();
+    meals.filter(m => m.food).forEach(m => { const k = m.food.toLowerCase(); if (!byName.has(k)) byName.set(k, {name:m.food, n:0}); byName.get(k).n++; });
+    byName.forEach((f, k) => {
+      if (f.n < 2) return;
+      const hits = gut.filter(s => mealsIn(s.t, W).some(m => m.food && m.food.toLowerCase() === k)).length;
+      const share = hits / gut.length, base = f.n / meals.length;
+      if (hits >= 2 && share >= 0.3 && share >= base + 0.15)
+        res.patterns.push({score: share - base, title: f.name, text:`You ate ${f.name} within ${win} hours before ${hits} of ${gut.length} cramp or nausea episodes.`});
+    });
+    // big portions
+    const bigHits = gut.filter(s => mealsIn(s.t, W).some(m => m.portion === 'Big')).length;
+    const bigBase = meals.filter(m => m.portion === 'Big').length / meals.length;
+    if (bigHits >= 2 && bigHits/gut.length >= 0.35 && bigHits/gut.length >= bigBase + 0.15)
+      res.patterns.push({score: bigHits/gut.length - bigBase, title:'Big meals', text:`A big meal came before ${bigHits} of ${gut.length} cramp or nausea episodes. Only ${pct(bigBase)} of your meals are big.`});
+  }
+  // coffee on an empty stomach
+  const empties = all.filter(e => e.type === 'coffee' && !mealsIn(e.t, 3*H).length);
+  if (empties.length && syms.length >= 3) {
+    const after = syms.filter(s => empties.some(c => c.t <= s.t && s.t - c.t <= 3*H)).length;
+    if (after >= 2) res.patterns.push({score: after/syms.length + 0.05, title:'Coffee on an empty stomach', text:`${after} of ${syms.length} symptom entries came within 3 hours of a coffee with no food beforehand.`});
+  }
+  // day-level factors
+  const byDay = new Map();
+  all.forEach(e => { const k = dayKey(e.t); if (!byDay.has(k)) byDay.set(k, []); byDay.get(k).push(e); });
+  const symDays = [...byDay.keys()].filter(k => byDay.get(k).some(e => SYMPTOMS.includes(e.type)));
+  const otherDays = [...byDay.keys()].filter(k => !symDays.includes(k));
+  const has = (k, f) => (byDay.get(k) || []).some(f);
+  const factor = (title, test, phrase) => {
+    if (symDays.length < 3 || otherDays.length < 2) return;
+    const ha = symDays.filter(test).length, a = ha / symDays.length, b = otherDays.filter(test).length / otherDays.length;
+    if (ha >= 2 && a - b >= 0.25) res.patterns.push({score: a - b, title, text:`${phrase} on ${pct(a)} of days with symptoms, compared with ${pct(b)} of days without.`});
+  };
+  factor('Alcohol', k => has(k, e => e.type === 'alcohol') || has(prevKey(k), e => e.type === 'alcohol'), 'You drank alcohol that day or the day before');
+  factor('Short sleep', k => has(k, e => e.type === 'sleep' && e.hours != null && e.hours < 6), 'You slept under 6 hours');
+  factor('High stress', k => has(k, e => e.type === 'stress' && e.level >= 4), 'Your stress was 4 or 5 out of 5');
+  factor('Loose bowel movements', k => has(k, e => e.type === 'bowel' && e.kind === 'Loose'), 'You logged a loose bowel movement');
+  // morning irritation vs late dinners
+  const mo = syms.filter(s => s.type === 'morning');
+  if (mo.length >= 3) {
+    const pairs = mo.map(s => [s, lastMeal(s.t)]).filter(([s, m]) => m && s.t - m.t < 36*H);
+    const late = pairs.filter(([, m]) => { const h = new Date(m.t).getHours(); return h >= 21 || h < 4; }).length;
+    if (pairs.length >= 3 && late >= 2 && late / pairs.length >= 0.5)
+      res.patterns.push({score: late/pairs.length, title:'Late eating', text:`Before ${late} of ${pairs.length} mornings with stomach irritation, your last meal was after 9 pm.`});
+    const g = pairs.map(([s, m]) => (s.t - m.t)/H);
+    if (g.length >= 3 && median(g) >= 11)
+      res.patterns.push({score: 0.3, title:'Long overnight fast', text:`On mornings with stomach irritation it had been about ${hr1(median(g))} since you last ate.`});
+  }
+  res.patterns.sort((a,b) => b.score - a.score);
+  return res;
+}
+
+/* ---------- PATTERNS ---------- */
+function renderPatterns() {
+  const all = sorted();
+  const syms = all.filter(e => SYMPTOMS.includes(e.type));
+  const now = Date.now(), s0 = startOfDay(now) - 6*DAY, s1 = s0 - 7*DAY;
+  const parts = [];
+
+  parts.push(`<section class="block"><h2>Last 7 days</h2><div class="stats">${SYMPTOMS.map(t => {
+    const a = syms.filter(e => e.type === t && e.t >= s0).length, b = syms.filter(e => e.type === t && e.t >= s1 && e.t < s0).length;
+    const d = a - b;
+    return `<div class="stat" style="--c:var(${TYPES[t].c})"><span class="k">${esc(label(t))}</span><span class="v">${a}</span>
+      <span class="d">${d === 0 ? 'Same as week before' : (d > 0 ? d + ' more' : -d + ' fewer') + ' than week before'}</span></div>`;
+  }).join('')}</div></section>`);
+
+  const NEED = 5;
+  if (syms.length < NEED) {
+    parts.push(`<div class="card"><p><b>Patterns need a bit more logging</b></p>
+      <p class="muted">You have ${syms.length} symptom ${syms.length === 1 ? 'entry' : 'entries'}. Trigger patterns start showing after ${NEED}, and get more reliable after two or three weeks. Logging your meals with “Contains” tags makes the biggest difference.</p>
+      <div class="progress"><i style="width:${Math.min(100, syms.length/NEED*100)}%"></i></div>
+      <button type="button" class="btn" data-goto="more">See it with sample data</button></div>`);
+  }
+
+  if (syms.length) {
+    const a = analyze(all);
+    if (syms.length >= NEED) {
+      parts.push(`<section class="block"><h2>Worth a look</h2><div class="insights">${a.patterns.length
+        ? a.patterns.slice(0, 8).map(p => `<div class="insight"><b>${esc(p.title)}</b><span>${esc(p.text)}</span></div>`).join('')
+        : `<div class="card"><p>Nothing stands out yet.</p><p class="muted">Keep logging meals and symptoms. A pattern shows here once something turns up before symptoms noticeably more often than usual.</p></div>`}</div></section>`);
+    }
+
+    const tod = timeOfDay(syms), mx = Math.max(1, ...tod.map(b => b.n));
+    parts.push(`<section class="block"><h2>When symptoms happen</h2><div class="card"><div class="bars">${tod.map(b =>
+      `<div class="bar" style="--c:var(--cramp)"><span class="lbl">${b.name}<br><span class="muted" style="font-size:12px">${b.sub}</span></span><span class="track"><span class="fill" style="display:block;width:${b.n/mx*100}%"></span></span><span class="n">${b.n}</span></div>`).join('')}</div></div></section>`);
+
+    const gapRows = SYMPTOMS.filter(t => a.gaps[t].length).map(t =>
+      `<div class="kv"><span>${esc(label(t))}</span><span>${hr1(median(a.gaps[t]))} typical · ${a.gaps[t].length} logged</span></div>`);
+    if (gapRows.length) {
+      parts.push(`<section class="block"><h2>Time since last meal</h2><div class="card">${gapRows.join('')}
+        ${a.within ? `<p class="note">${a.within.hits} of ${a.within.n} cramp or nausea episodes came within ${state.settings.window} hours of eating.</p>` : ''}</div></section>`);
+    }
+
+    const tags = a.tags.filter(t => t.hits || t.base).slice(0, 8);
+    if (tags.length && a.gutN >= 3) {
+      parts.push(`<section class="block"><h2>Foods before cramps &amp; nausea</h2><div class="card">
+        <div class="legend"><span><i style="background:var(--cramp)"></i>Before symptoms</span><span><i style="background:var(--fg-3)"></i>All meals</span></div>
+        ${tags.map(t => `<div class="cmp"><span class="lbl">${esc(t.tag)}</span>
+          <span class="track"><span class="fill a" style="display:block;width:${t.share*100}%"></span></span>
+          <span class="track"><span class="fill b" style="display:block;width:${t.base*100}%"></span></span></div>`).join('')}
+        <p class="note">Top bar: share of cramp or nausea episodes with this in a meal in the ${state.settings.window} hours before. Bottom bar: share of all your meals that contain it. A top bar much longer than the bottom one is worth watching.</p>
+      </div></section>`);
+    }
+  }
+
+  const meds = medStats(all);
+  if (meds.length) {
+    parts.push(`<section class="block"><h2>Medication</h2><div class="card">${meds.map(m => {
+      const r = m.yes + m.abit + m.no;
+      return `<div class="kv"><span>${esc(m.name)}</span><span>${m.n}× taken${r ? ` · helped ${m.yes + m.abit} of ${r}` : ''}</span></div>`;
+    }).join('')}</div></section>`);
+  }
+
+  parts.push(`<p class="note">Patterns show what tends to come before your symptoms in your own logs. They point to things to discuss with your doctor, not to causes.</p>`);
+  $('#patterns-body').innerHTML = parts.join('');
+  $$('#patterns-body [data-goto]').forEach(b => b.addEventListener('click', () => setTab(b.dataset.goto)));
+}
+
+/* ---------- MORE ---------- */
+let newMedKind = 'As needed', wipeArmed = false;
+function renderMore() {
+  $('#med-list').innerHTML = state.meds.length
+    ? state.meds.map((m, i) => `<div class="li"><div class="t"><span>${esc(m.name)}</span><small>${esc(m.kind || 'As needed')}</small></div>
+        <button type="button" class="x" data-rm-med="${i}" aria-label="Remove ${esc(m.name)}">×</button></div>`).join('')
+    : `<div class="li"><div class="t"><span class="muted">No saved medications</span><small>Add them here and they become one-tap choices when you log Medication.</small></div></div>`;
+  $('#win-val').textContent = state.settings.window + ' h';
+  const nf = Object.keys(state.foods).length;
+  $('#foods-count').textContent = nf ? `${nf} remembered with their tags` : 'Foods you type are remembered with their tags.';
+  const hasSample = state.entries.some(e => e.sample);
+  $('#btn-sample').textContent = hasSample ? 'Remove' : 'Add';
+  $('#sample-note').textContent = hasSample
+    ? 'Sample entries are in your history and patterns. Remove them before you start logging for real.'
+    : 'Adds two weeks of made-up entries so you can see Patterns working. Marked “Sample” and removable in one tap.';
+  $('#btn-wipe').textContent = wipeArmed ? 'Tap again to erase everything' : 'Erase all data';
+}
+$('#med-list').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-rm-med]'); if (!b) return;
+  state.meds.splice(Number(b.dataset.rmMed), 1); save(); renderMore();
+});
+$$('#med-new-kind button').forEach(b => b.addEventListener('click', () => {
+  newMedKind = b.dataset.kind; $$('#med-new-kind button').forEach(x => x.classList.toggle('on', x === b));
+}));
+function addMed() {
+  const v = $('#med-new').value.trim(); if (!v) return;
+  if (!state.meds.some(m => m.name.toLowerCase() === v.toLowerCase())) state.meds.push({name: v, kind: newMedKind});
+  $('#med-new').value = ''; save(); renderMore(); toast(`${v} saved`);
+}
+$('#med-add').addEventListener('click', addMed);
+$('#med-new').addEventListener('keydown', e => { if (e.key === 'Enter') addMed(); });
+$('#win-down').addEventListener('click', () => { state.settings.window = Math.max(1, state.settings.window - 1); save(); renderMore(); });
+$('#win-up').addEventListener('click', () => { state.settings.window = Math.min(24, state.settings.window + 1); save(); renderMore(); });
+$('#foods-clear').addEventListener('click', () => { state.foods = {}; save(); renderMore(); toast('Saved foods cleared'); });
+$('#btn-backup').addEventListener('click', () => openText('Backup', JSON.stringify({app:'cramplogger', exported:new Date().toISOString(), ...state})));
+$('#btn-restore-open').addEventListener('click', () => { $('#restore-box').hidden = !$('#restore-box').hidden; });
+$('#restore-file').addEventListener('change', ev => {
+  const f = ev.target.files && ev.target.files[0]; if (!f) return;
+  const r = new FileReader(); r.onload = () => { $('#restore-text').value = r.result; }; r.readAsText(f);
+});
+$('#btn-restore').addEventListener('click', () => {
+  let data;
+  try { data = JSON.parse($('#restore-text').value.trim()); } catch (e) { toast('That doesn’t look like a backup. Paste the whole thing.'); return; }
+  if (!data || !Array.isArray(data.entries)) { toast('No entries found in that backup.'); return; }
+  const have = new Set(state.entries.map(e => e.id));
+  const add = data.entries.filter(e => e && e.id && TYPES[e.type] && typeof e.t === 'number' && !have.has(e.id));
+  state.entries.push(...add);
+  (data.meds || []).forEach(m => { if (m && m.name && !state.meds.some(x => x.name.toLowerCase() === m.name.toLowerCase())) state.meds.push(m); });
+  Object.assign(state.foods, data.foods || {});
+  save(); $('#restore-text').value = ''; $('#restore-box').hidden = true; render();
+  toast(`Restored ${add.length} ${add.length === 1 ? 'entry' : 'entries'}`);
+});
+$('#btn-wipe').addEventListener('click', () => {
+  if (!wipeArmed) { wipeArmed = true; renderMore(); setTimeout(() => { wipeArmed = false; if (tab === 'more') renderMore(); }, 4000); return; }
+  const backup = state; state = blank(); wipeArmed = false; save(); render();
+  toast('All data erased', 'Undo', () => { state = backup; save(); render(); });
+});
+$('#btn-sample').addEventListener('click', () => {
+  if (state.entries.some(e => e.sample)) {
+    state.entries = state.entries.filter(e => !e.sample);
+    Object.keys(state.foods).forEach(k => { if (state.foods[k].sample) delete state.foods[k]; });
+    save(); render(); toast('Sample data removed'); return;
+  }
+  state.entries.push(...sampleData()); save(); render(); toast('Sample data added. Open Patterns.');
+});
+
+/* ---------- sample data (clearly marked) ---------- */
+function sampleData() {
+  const out = [], base = startOfDay(Date.now());
+  let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  const at = (d, h, m) => base - d*DAY + (h*60 + m)*6e4;
+  const add = (type, t, extra = {}) => out.push({id: uid() + out.length, type, t, sample: true, ...extra});
+  const lunches = [['Chicken wrap',[]],['Pasta carbonara',['Dairy','Gluten / wheat','Greasy / fried']],['Sushi',[]],['Burger and chips',['Gluten / wheat','Greasy / fried','Red meat','Takeaway']],['Salad',['Onion / garlic']]];
+  const dinners = [['Curry',['Spicy','Onion / garlic']],['Pizza',['Dairy','Gluten / wheat','Takeaway']],['Steak and veg',['Red meat']],['Stir fry',['Onion / garlic']],['Mac and cheese',['Dairy','Gluten / wheat']]];
+  for (let d = 13; d >= 1; d--) {
+    add('sleep', at(d, 6, 40), {hours: d % 4 === 0 ? 5 : 7.5, quality: d % 4 === 0 ? 2 : 4});
+    const skipBreakfast = d % 3 === 0;
+    if (!skipBreakfast) add('meal', at(d, 7, 30), {food: d % 2 ? 'Porridge' : 'Toast and eggs', mealType:'Breakfast', portion:'Normal', tags: d % 2 ? [] : ['Gluten / wheat']});
+    add('coffee', at(d, skipBreakfast ? 7 : 8, 0));
+    if (skipBreakfast) add('nausea', at(d, 9, 15), {sev: 3});
+    const l = lunches[d % lunches.length];
+    add('meal', at(d, 12, 30), {food: l[0], mealType:'Lunch', portion:'Normal', tags: l[1]});
+    if (l[1].includes('Dairy') || l[1].includes('Greasy / fried')) add(d % 2 ? 'severe' : 'cramps', at(d, 14, 20), {sev: d % 2 ? 4 : 3});
+    add('water', at(d, 15, 0), {count: 2});
+    const dn = dinners[d % dinners.length];
+    const late = d % 4 === 1;
+    add('meal', at(d, late ? 21 : 18, late ? 40 : 45), {food: dn[0], mealType:'Dinner', portion: d % 5 === 0 ? 'Big' : 'Normal', tags: dn[1]});
+    if (dn[1].includes('Dairy')) add('cramps', at(d, late ? 23 : 21, 10), {sev: 2 + Math.round(rnd()*2)});
+    if (d % 4 === 0) add('alcohol', at(d, 19, 30), {count: 3});
+    if (d % 4 === 2) add('morning', at(d, 6, 50), {sev: 2});
+    if (d % 5 === 2) add('stress', at(d, 17, 0), {level: 4});
+    if (d % 6 === 3) add('bowel', at(d, 8, 30), {kind:'Loose'});
+  }
+  [12, 9, 5, 2].forEach((d, i) => add('med', at(d, 14, 40), {med:'Buscopan 10mg', kind:'As needed', helped: ['Yes','A bit','Yes','No'][i]}));
+  return out;
+}
+
+/* ---------- boot ---------- */
+buildTiles();
+setTab((location.hash || '#log').slice(1), false);
+setInterval(() => { if (tab === 'log' && !openSheetEl) renderLog(); }, 60000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !openSheetEl) render(); });
+
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  try { navigator.serviceWorker.register('sw.js').catch(() => {}); } catch (e) {}
+}
+})();
+</script>
+</body>
+</html>
