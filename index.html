@@ -23,7 +23,7 @@
   --accent:#8ab4ff; --danger:#ff6b6b; --good:#6fd6a0;
   --cramp:#ffa36c; --severe:#ff6b81; --nausea:#c7a2ff; --morning:#ffd36e;
   --food:#6fd6a0; --coffee:#d9b48c; --alcohol:#ec8fc8; --water:#6cc8ff;
-  --med:#7fb2ff; --body:#aab3cc;
+  --med:#7fb2ff; --probiotic:#5fd4c8; --body:#aab3cc;
   --font:-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
   --mono:ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --ease:cubic-bezier(.2,.9,.25,1);
@@ -297,6 +297,15 @@ input[type="datetime-local"].text-in{min-height:46px}
     </section>
 
     <section class="block">
+      <h2>Probiotics</h2>
+      <div class="list" id="pro-list"></div>
+      <div class="inline" style="margin-top:10px">
+        <input class="text-in" id="pro-new" placeholder="e.g. Inner Health Plus" autocomplete="off">
+        <button type="button" class="btn" id="pro-add">Add</button>
+      </div>
+    </section>
+
+    <section class="block">
       <h2>Patterns</h2>
       <div class="list">
         <div class="li"><div class="t"><span>Link meals to symptoms within</span><small>Food eaten in this window before a symptom counts toward it.</small></div>
@@ -408,6 +417,7 @@ const TYPES = {
   alcohol:  {label:'Alcohol', cat:'food', c:'--alcohol'},
   water:    {label:'Water', cat:'food', c:'--water'},
   med:      {label:'Medication', cat:'med', c:'--med'},
+  probiotic:{label:'Probiotic', cat:'med', c:'--probiotic'},
   bowel:    {label:'Bowel movement', cat:'body', c:'--body'},
   sleep:    {label:'Sleep', cat:'body', c:'--body'},
   stress:   {label:'Stress', cat:'body', c:'--body'},
@@ -417,10 +427,18 @@ const SYMPTOMS = ['cramps','severe','nausea','morning'];
 const GUT = ['cramps','severe','nausea'];
 const GROUPS = [
   ['Symptoms', ['cramps','severe','nausea','morning'], 'sym'],
-  ['Food & drink', ['meal','coffee','alcohol','water']],
-  ['Medication & body', ['med','bowel','sleep','stress','exercise']],
+  ['Food & drink', ['meal','alcohol','water']],
+  ['Medication & body', ['med','probiotic','bowel','sleep','stress','exercise']],
 ];
-const TAGS = ['Dairy','Gluten / wheat','Spicy','Greasy / fried','Onion / garlic','Sugary','Red meat','Beans / lentils','Fizzy drink','Takeaway'];
+const TAGS = ['Dairy','Gluten / wheat','Spicy','Greasy / fried','Onion / garlic','Sugary','Red meat','Beans / lentils','Coffee / caffeine','Fizzy drink','Takeaway'];
+
+/* Preloaded choices. Each preset is added once; removing it in More keeps it removed. */
+const PRESET_MEDS = [
+  // {name:'Example 10mg', kind:'As needed'},
+];
+const PRESET_PROBIOTICS = [
+  // {name:'Example probiotic'},
+];
 const SEV = ['', 'Mild', '', 'Moderate', '', 'Worst'];
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -432,7 +450,7 @@ const label = t => TYPES[t].label;
 const haptic = () => { try { navigator.vibrate && navigator.vibrate(8); } catch (e) {} };
 
 /* ---------- storage ---------- */
-const blank = () => ({v:1, entries:[], meds:[], foods:{}, settings:{window:6}});
+const blank = () => ({v:1, entries:[], meds:[], probiotics:[], presets:[], foods:{}, settings:{window:6}});
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
@@ -445,6 +463,17 @@ function load() {
 }
 let state = load();
 let storageOk = true;
+function applyPresets() {
+  let changed = false;
+  const add = (list, item, key) => {
+    if (state.presets.includes(key)) return;
+    state.presets.push(key); changed = true;
+    if (!list.some(x => x.name.toLowerCase() === item.name.toLowerCase())) list.push({...item});
+  };
+  PRESET_MEDS.forEach(m => add(state.meds, {name: m.name, kind: m.kind || 'As needed'}, 'med:' + m.name.toLowerCase()));
+  PRESET_PROBIOTICS.forEach(p => add(state.probiotics, {name: p.name}, 'pro:' + p.name.toLowerCase()));
+  return changed;
+}
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(state)); storageOk = true; }
   catch (e) { if (storageOk) toast("Couldn't save. This browser is blocking storage."); storageOk = false; }
@@ -502,6 +531,7 @@ function details(e) {
       if (e.kind) p.push(e.kind.toLowerCase());
       if (e.helped && e.helped !== 'Skip') p.push('helped: ' + e.helped.toLowerCase());
       break;
+    case 'probiotic': if (e.name) p.push(e.name); break;
     case 'bowel': if (e.kind) p.push(e.kind.toLowerCase()); break;
     case 'sleep': if (e.hours != null) p.push(hr1(e.hours)); if (e.quality) p.push(`quality ${e.quality}/5`); break;
     case 'stress': if (e.level) p.push(`${e.level}/5`); break;
@@ -555,7 +585,7 @@ function render() {
 function buildTiles() {
   $('#groups').innerHTML = GROUPS.map(([name, types, cls]) => `
     <section class="block"><h2>${esc(name)}</h2><div class="grid">
-      ${types.map(t => `<button type="button" class="tile ${cls || ''}" data-type="${t}" style="--c:var(${TYPES[t].c})">
+      ${types.map(t => `<button type="button" class="tile ${cls || ''} ${t === 'meal' ? 'wide' : ''}" data-type="${t}" style="--c:var(${TYPES[t].c})">
         <span class="dot"></span><span class="tile-text"><span class="tile-label">${esc(label(t))}</span><span class="tile-meta"></span></span>
       </button>`).join('')}
     </div></section>`).join('');
@@ -598,6 +628,7 @@ function quickLog(type, el) {
     e.kind = 'As needed';
     if (state.meds.length === 1) { e.med = state.meds[0].name; e.kind = state.meds[0].kind || 'As needed'; }
   }
+  if (type === 'probiotic' && state.probiotics.length === 1) e.name = state.probiotics[0].name;
   if (type === 'sleep') e.hours = 7;
   if (type === 'exercise') e.mins = 30;
   state.entries.push(e);
@@ -669,6 +700,12 @@ function fieldsFor(e) {
       if (e.kind === 'As needed') out.push(segField('helped', ['Yes','A bit','No'], e.helped, curNew ? 'Did it help? (I’ll ask again in an hour)' : 'Did it help?'));
       break;
     }
+    case 'probiotic':
+      out.push(`<div class="field"><label class="flabel" for="f-pro">Which probiotic?<em>Optional</em></label>
+        ${state.probiotics.length ? `<div class="chips">${state.probiotics.map(p => `<button type="button" class="chip ${e.name === p.name ? 'on' : ''}" data-pro="${esc(p.name)}">${esc(p.name)}</button>`).join('')}</div>` : ''}
+        <input class="text-in" id="f-pro" data-input="name" value="${esc(e.name || '')}" placeholder="e.g. Inner Health Plus, Yakult" autocomplete="off" enterkeyhint="done">
+      </div>`);
+      break;
     case 'bowel': out.push(segField('kind', ['Normal','Loose','Hard'], e.kind, 'Type')); break;
     case 'sleep':
       out.push(stepField('hours', e.hours, 'How long did you sleep?', 'Hours', 0.5, 0, 16));
@@ -720,7 +757,7 @@ function hide(el) {
 function commitAndClose() {
   if (!cur) return hide(sheet);
   const e = cur;
-  ['food','med','note'].forEach(k => { if (typeof e[k] === 'string') { e[k] = e[k].trim(); if (!e[k]) delete e[k]; } });
+  ['food','med','name','note'].forEach(k => { if (typeof e[k] === 'string') { e[k] = e[k].trim(); if (!e[k]) delete e[k]; } });
   if (e.type === 'meal' && e.food) {
     const k = e.food.toLowerCase();
     const f = state.foods[k] || {name: e.food, n: 0};
@@ -731,6 +768,9 @@ function commitAndClose() {
   }
   if (e.type === 'med' && e.med && !state.meds.some(m => m.name.toLowerCase() === e.med.toLowerCase())) {
     state.meds.push({name: e.med, kind: e.kind || 'As needed'});
+  }
+  if (e.type === 'probiotic' && e.name && !state.probiotics.some(p => p.name.toLowerCase() === e.name.toLowerCase())) {
+    state.probiotics.push({name: e.name});
   }
   save();
   const wasNew = curNew;
@@ -770,6 +810,7 @@ $('#sheet-body').addEventListener('click', ev => {
     e.med = b.dataset.med; const m = state.meds.find(x => x.name === e.med); if (m && m.kind) e.kind = m.kind;
     if (e.kind !== 'As needed') delete e.helped;
   }
+  else if (b.dataset.pro) { e.name = e.name === b.dataset.pro ? undefined : b.dataset.pro; if (!e.name) delete e.name; }
   else return;
   save(); haptic();
   const st = $('#sheet-body').scrollTop;
@@ -979,9 +1020,9 @@ function timeOfDay(syms) {
 }
 function medStats(list) {
   const m = new Map();
-  list.filter(e => e.type === 'med').forEach(e => {
-    const name = e.med || 'Unnamed medication', k = name.toLowerCase();
-    if (!m.has(k)) m.set(k, {name, n:0, yes:0, abit:0, no:0, kind:e.kind});
+  list.filter(e => e.type === 'med' || e.type === 'probiotic').forEach(e => {
+    const name = e.type === 'probiotic' ? (e.name ? 'Probiotic: ' + e.name : 'Probiotic') : (e.med || 'Unnamed medication'), k = name.toLowerCase();
+    if (!m.has(k)) m.set(k, {name, n:0, yes:0, abit:0, no:0, kind: e.type === 'probiotic' ? '' : e.kind});
     const s = m.get(k); s.n++;
     if (e.helped === 'Yes') s.yes++; else if (e.helped === 'A bit') s.abit++; else if (e.helped === 'No') s.no++;
   });
@@ -1059,6 +1100,17 @@ function analyze(entries) {
   factor('Short sleep', k => has(k, e => e.type === 'sleep' && e.hours != null && e.hours < 6), 'You slept under 6 hours');
   factor('High stress', k => has(k, e => e.type === 'stress' && e.level >= 4), 'Your stress was 4 or 5 out of 5');
   factor('Loose bowel movements', k => has(k, e => e.type === 'bowel' && e.kind === 'Loose'), 'You logged a loose bowel movement');
+  // probiotics: do symptom days drop on days you take one?
+  {
+    const days = [...byDay.keys()];
+    const pro = days.filter(k => has(k, e => e.type === 'probiotic'));
+    const non = days.filter(k => !pro.includes(k));
+    if (pro.length >= 3 && non.length >= 3 && symDays.length >= 3) {
+      const a = pro.filter(k => symDays.includes(k)).length / pro.length;
+      const b = non.filter(k => symDays.includes(k)).length / non.length;
+      if (b - a >= 0.2) res.patterns.push({score: b - a, title:'Probiotic days', text:`You had symptoms on ${pct(a)} of days you took a probiotic, compared with ${pct(b)} of days you didn’t.`});
+    }
+  }
   // morning irritation vs late dinners
   const mo = syms.filter(s => s.type === 'morning');
   if (mo.length >= 3) {
@@ -1147,6 +1199,10 @@ function renderMore() {
     ? state.meds.map((m, i) => `<div class="li"><div class="t"><span>${esc(m.name)}</span><small>${esc(m.kind || 'As needed')}</small></div>
         <button type="button" class="x" data-rm-med="${i}" aria-label="Remove ${esc(m.name)}">×</button></div>`).join('')
     : `<div class="li"><div class="t"><span class="muted">No saved medications</span><small>Add them here and they become one-tap choices when you log Medication.</small></div></div>`;
+  $('#pro-list').innerHTML = state.probiotics.length
+    ? state.probiotics.map((p, i) => `<div class="li"><div class="t"><span>${esc(p.name)}</span></div>
+        <button type="button" class="x" data-rm-pro="${i}" aria-label="Remove ${esc(p.name)}">×</button></div>`).join('')
+    : `<div class="li"><div class="t"><span class="muted">No saved probiotics</span><small>Add them here and they become one-tap choices when you log Probiotic.</small></div></div>`;
   $('#win-val').textContent = state.settings.window + ' h';
   const nf = Object.keys(state.foods).length;
   $('#foods-count').textContent = nf ? `${nf} remembered with their tags` : 'Foods you type are remembered with their tags.';
@@ -1170,6 +1226,17 @@ function addMed() {
   $('#med-new').value = ''; save(); renderMore(); toast(`${v} saved`);
 }
 $('#med-add').addEventListener('click', addMed);
+$('#pro-list').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-rm-pro]'); if (!b) return;
+  state.probiotics.splice(Number(b.dataset.rmPro), 1); save(); renderMore();
+});
+function addPro() {
+  const v = $('#pro-new').value.trim(); if (!v) return;
+  if (!state.probiotics.some(p => p.name.toLowerCase() === v.toLowerCase())) state.probiotics.push({name: v});
+  $('#pro-new').value = ''; save(); renderMore(); toast(`${v} saved`);
+}
+$('#pro-add').addEventListener('click', addPro);
+$('#pro-new').addEventListener('keydown', e => { if (e.key === 'Enter') addPro(); });
 $('#med-new').addEventListener('keydown', e => { if (e.key === 'Enter') addMed(); });
 $('#win-down').addEventListener('click', () => { state.settings.window = Math.max(1, state.settings.window - 1); save(); renderMore(); });
 $('#win-up').addEventListener('click', () => { state.settings.window = Math.min(24, state.settings.window + 1); save(); renderMore(); });
@@ -1218,7 +1285,7 @@ function sampleData() {
     add('sleep', at(d, 6, 40), {hours: d % 4 === 0 ? 5 : 7.5, quality: d % 4 === 0 ? 2 : 4});
     const skipBreakfast = d % 3 === 0;
     if (!skipBreakfast) add('meal', at(d, 7, 30), {food: d % 2 ? 'Porridge' : 'Toast and eggs', mealType:'Breakfast', portion:'Normal', tags: d % 2 ? [] : ['Gluten / wheat']});
-    add('coffee', at(d, skipBreakfast ? 7 : 8, 0));
+    if (d % 2 === 0) add('probiotic', at(d, 8, 5), {name:'Sample probiotic'});
     if (skipBreakfast) add('nausea', at(d, 9, 15), {sev: 3});
     const l = lunches[d % lunches.length];
     add('meal', at(d, 12, 30), {food: l[0], mealType:'Lunch', portion:'Normal', tags: l[1]});
@@ -1238,6 +1305,7 @@ function sampleData() {
 }
 
 /* ---------- boot ---------- */
+if (applyPresets()) save();
 buildTiles();
 setTab((location.hash || '#log').slice(1), false);
 setInterval(() => { if (tab === 'log' && !openSheetEl) renderLog(); }, 60000);
