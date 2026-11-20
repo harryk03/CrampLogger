@@ -1,6 +1,7 @@
 // Offline cache for the app shell. Bump VERSION when files change.
-const VERSION = 'cramplogger-v3';
-const FILES = ['./', './index.html', './manifest.json', './icon.svg', './icon-180.png', './icon-192.png', './icon-512.png'];
+const VERSION = 'cramplogger-v4';
+const FILES = ['./', './index.html', './manifest.json', './icon.svg', './icon-180.png', './icon-192.png', './icon-512.png',
+  './img/ferro-supreme.jpg', './img/charcoal.jpg', './img/ultrabiotic-60.jpg', './img/total-restore.jpg', './img/aloe-juice.jpg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

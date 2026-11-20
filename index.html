@@ -85,6 +85,18 @@ section.block{display:flex;flex-direction:column}
 .chip{padding:7px 12px;border-radius:999px;background:var(--surface-2);font-size:14px;color:var(--fg-2);box-shadow:inset 0 0 0 1px var(--line);transition:background-color 140ms,color 140ms}
 .chip.on{background:color-mix(in srgb,var(--c,var(--accent)) 22%,var(--surface-2));color:var(--fg);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--c,var(--accent)) 60%,transparent)}
 .chip:active{transform:scale(.96)}
+.picks{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.pick{display:flex;align-items:center;gap:10px;padding:8px;border-radius:14px;background:var(--surface-2);text-align:left;min-width:0;box-shadow:inset 0 0 0 1px var(--line);transition:background-color 140ms,box-shadow 140ms}
+.pick:active{transform:scale(.97)}
+.pick.on{background:color-mix(in srgb,var(--c,var(--accent)) 16%,var(--surface-2));box-shadow:inset 0 0 0 2px var(--c,var(--accent))}
+.pick-img{width:54px;height:54px;flex:none;border-radius:10px;overflow:hidden;background:var(--surface-3);display:grid;place-items:center;font-size:22px;font-weight:700;color:var(--fg-2)}
+.pick-img img{width:100%;height:100%;object-fit:cover;display:block}
+.pick-t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.pick-t b{font-size:14.5px;font-weight:600;line-height:1.2;overflow-wrap:anywhere}
+.pick-t small{font-size:12px;color:var(--fg-2);line-height:1.25}
+.li .pick-img{width:42px;height:42px;font-size:17px}
+.li .lead{display:flex;align-items:center;gap:12px;min-width:0;flex:1}
+.kind-btn{padding:6px 10px;border-radius:999px;background:var(--surface-2);font-size:12.5px;font-weight:600;color:var(--fg-2);flex:none}
 
 /* History */
 .toolbar{display:flex;flex-direction:column;gap:10px}
@@ -284,7 +296,7 @@ input[type="datetime-local"].text-in{min-height:46px}
     </div>
 
     <section class="block">
-      <h2>Medications</h2>
+      <h2>Meds &amp; supplements</h2>
       <div class="list" id="med-list"></div>
       <div class="inline" style="margin-top:10px">
         <input class="text-in" id="med-new" placeholder="e.g. Buscopan 10mg" autocomplete="off">
@@ -416,7 +428,7 @@ const TYPES = {
   coffee:   {label:'Coffee', cat:'food', c:'--coffee'},
   alcohol:  {label:'Alcohol', cat:'food', c:'--alcohol'},
   water:    {label:'Water', cat:'food', c:'--water'},
-  med:      {label:'Medication', cat:'med', c:'--med'},
+  med:      {label:'Meds & supplements', cat:'med', c:'--med'},
   probiotic:{label:'Probiotic', cat:'med', c:'--probiotic'},
   bowel:    {label:'Bowel movement', cat:'body', c:'--body'},
   sleep:    {label:'Sleep', cat:'body', c:'--body'},
@@ -434,7 +446,11 @@ const TAGS = ['Dairy','Gluten / wheat','Spicy','Greasy / fried','Onion / garlic'
 
 /* Preloaded choices. Each preset is added once; removing it in More keeps it removed. */
 const PRESET_MEDS = [
-  {name:'Buscopan 10mg', kind:'As needed'},
+  {name:'Buscopan 10mg', kind:'As needed', dose:'Hyoscine butylbromide'},
+  {name:'Activated Charcoal', kind:'As needed', dose:'260mg · 4 capsules', img:'img/charcoal.jpg'},
+  {name:'Ferro Supreme', kind:'Regular', dose:'Iron 24mg · 1 capsule', img:'img/ferro-supreme.jpg'},
+  {name:'Total Restore', kind:'Regular', dose:'Gut lining · 3 capsules', img:'img/total-restore.jpg'},
+  {name:'Aloe Juice', kind:'Regular', dose:'Aloe Vera of Australia', img:'img/aloe-juice.jpg'},
 ];
 /* Buttons that log an existing entry type with preset details. */
 const TILES = {
@@ -447,8 +463,17 @@ function tileMatch(t, e) {
   return e.type === t;
 }
 const PRESET_PROBIOTICS = [
-  // {name:'Example probiotic'},
+  {name:'UltraBiotic 60', dose:'60 billion CFU · 1 capsule', img:'img/ultrabiotic-60.jpg'},
 ];
+const presetInfo = n => [...PRESET_MEDS, ...PRESET_PROBIOTICS].find(p => p.name.toLowerCase() === String(n || '').toLowerCase()) || {};
+function pickGrid(list, attr, selected) {
+  return `<div class="picks">${list.map(m => {
+    const p = presetInfo(m.name), img = m.img || p.img, sub = m.dose || p.dose || '';
+    return `<button type="button" class="pick ${selected.includes(m.name) ? 'on' : ''}" data-${attr}="${esc(m.name)}">
+      <span class="pick-img">${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : esc(m.name.charAt(0))}</span>
+      <span class="pick-t"><b>${esc(m.name)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span></button>`;
+  }).join('')}</div>`;
+}
 const SEV = ['', 'Mild', '', 'Moderate', '', 'Worst'];
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -704,18 +729,23 @@ function fieldsFor(e) {
     case 'alcohol': out.push(stepField('count', e.count, 'How many drinks?', 'Standard drinks', 1, 1, 20)); break;
     case 'water': out.push(stepField('count', e.count, 'How much?', 'Glasses', 1, 1, 20)); break;
     case 'med': {
-      out.push(`<div class="field"><label class="flabel" for="f-med">Which medication?</label>
-        <input class="text-in" id="f-med" data-input="med" value="${esc(e.med || '')}" placeholder="Name and dose, e.g. Buscopan 10mg" autocomplete="off" enterkeyhint="done">
-        ${state.meds.length ? `<div class="chips">${state.meds.map(m => `<button type="button" class="chip ${e.med === m.name ? 'on' : ''}" data-med="${esc(m.name)}">${esc(m.name)}</button>`).join('')}</div>` : ''}
+      const sel = e._sel || [];
+      const meds = [...state.meds].sort((a, b) => (a.kind === 'As needed' ? 0 : 1) - (b.kind === 'As needed' ? 0 : 1));
+      out.push(`<div class="field"><div class="flabel">What did you take?<em>${curNew ? 'Tap all that apply' : 'Tap to change'}</em></div>
+        ${meds.length ? pickGrid(meds, 'med', sel) : ''}
+        <input class="text-in" id="f-med" data-input="_other" value="${esc(e._other || '')}" placeholder="Something else? Type the name and dose" autocomplete="off" enterkeyhint="done">
       </div>`);
-      out.push(segField('kind', ['As needed','Regular'], e.kind, 'Why', false));
-      if (e.kind === 'As needed') out.push(segField('helped', ['Yes','A bit','No'], e.helped, curNew ? 'Did it help? (I’ll ask again in an hour)' : 'Did it help?'));
+      const single = sel.length === 1 && !e._other;
+      const kind = single ? ((state.meds.find(m => m.name === sel[0]) || {}).kind || e.kind) : null;
+      if (!curNew && single && kind === 'As needed') out.push(segField('helped', ['Yes','A bit','No'], e.helped, 'Did it help?'));
+      if (curNew && sel.some(n => ((state.meds.find(m => m.name === n) || {}).kind) === 'As needed'))
+        out.push(`<div class="hint">I’ll ask whether it helped in about an hour.</div>`);
       break;
     }
     case 'probiotic':
       out.push(`<div class="field"><label class="flabel" for="f-pro">Which probiotic?<em>Optional</em></label>
-        ${state.probiotics.length ? `<div class="chips">${state.probiotics.map(p => `<button type="button" class="chip ${e.name === p.name ? 'on' : ''}" data-pro="${esc(p.name)}">${esc(p.name)}</button>`).join('')}</div>` : ''}
-        <input class="text-in" id="f-pro" data-input="name" value="${esc(e.name || '')}" placeholder="e.g. Inner Health Plus, Yakult" autocomplete="off" enterkeyhint="done">
+        ${state.probiotics.length ? pickGrid(state.probiotics, 'pro', [e.name]) : ''}
+        <input class="text-in" id="f-pro" data-input="name" value="${esc(state.probiotics.some(p => p.name === e.name) ? '' : (e.name || ''))}" placeholder="Something else? Type its name" autocomplete="off" enterkeyhint="done">
       </div>`);
       break;
     case 'bowel': out.push(segField('kind', ['Normal','Loose','Hard'], e.kind, 'Type')); break;
@@ -746,6 +776,7 @@ function updateSheetSub() {
 }
 function openSheet(e, isNew) {
   cur = e; curNew = isNew; delArmed = false;
+  if (e.type === 'med') { e._sel = e.med ? [e.med] : []; e._other = ''; if (e.med && !state.meds.some(m => m.name === e.med)) { e._sel = []; e._other = e.med; } }
   renderSheet();
   $('#sheet-body').scrollTop = 0;
   show(sheet);
@@ -769,6 +800,24 @@ function hide(el) {
 function commitAndClose() {
   if (!cur) return hide(sheet);
   const e = cur;
+  const extras = [];
+  if (e.type === 'med') {
+    const names = [...(e._sel || [])];
+    const other = (e._other || '').trim();
+    if (other && !names.some(n => n.toLowerCase() === other.toLowerCase())) names.push(other);
+    delete e._sel; delete e._other;
+    if (other && !state.meds.some(m => m.name.toLowerCase() === other.toLowerCase())) state.meds.push({name: other, kind: 'As needed'});
+    const kindOf = n => (state.meds.find(m => m.name.toLowerCase() === n.toLowerCase()) || {}).kind || 'As needed';
+    if (names.length) {
+      e.med = names[0]; e.kind = kindOf(names[0]);
+      if (e.kind !== 'As needed') delete e.helped;
+      names.slice(1).forEach((n, i) => {
+        const x = {id: uid() + i, type: 'med', t: e.t, med: n, kind: kindOf(n)};
+        if (e.note) x.note = e.note;
+        state.entries.push(x); extras.push(x);
+      });
+    } else { delete e.med; }
+  }
   ['food','med','name','note'].forEach(k => { if (typeof e[k] === 'string') { e[k] = e[k].trim(); if (!e[k]) delete e[k]; } });
   if (e.type === 'meal' && e.food) {
     const k = e.food.toLowerCase();
@@ -789,7 +838,8 @@ function commitAndClose() {
   cur = null;
   hide(sheet);
   render();
-  if (wasNew) toast(`Logged ${label(e.type)} · ${fmtTime(e.t)}`, 'Undo', () => { removeEntry(e); render(); toast('Removed'); });
+  const what = e.type === 'med' && e.med ? (extras.length ? `${extras.length + 1} items` : e.med) : (e.type === 'probiotic' && e.name ? e.name : label(e.type));
+  if (wasNew) toast(`Logged ${what} · ${fmtTime(e.t)}`, 'Undo', () => { [e, ...extras].forEach(removeEntry); render(); toast('Removed'); });
 }
 $('#sheet-done').addEventListener('click', commitAndClose);
 $('#sheet-delete').addEventListener('click', () => {
@@ -819,8 +869,9 @@ $('#sheet-body').addEventListener('click', ev => {
     e.food = b.dataset.food; if (f && f.tags) e.tags = [...f.tags];
   }
   else if (b.dataset.med) {
-    e.med = b.dataset.med; const m = state.meds.find(x => x.name === e.med); if (m && m.kind) e.kind = m.kind;
-    if (e.kind !== 'As needed') delete e.helped;
+    const n = b.dataset.med, sel = e._sel || [];
+    e._sel = curNew ? (sel.includes(n) ? sel.filter(x => x !== n) : [...sel, n]) : [n];
+    const inp = $('#f-med'); if (inp) e._other = inp.value;
   }
   else if (b.dataset.pro) { e.name = e.name === b.dataset.pro ? undefined : b.dataset.pro; if (!e.name) delete e.name; }
   else return;
@@ -972,7 +1023,7 @@ function doctorText() {
 
   const meds = medStats(list);
   if (meds.length) {
-    L.push('MEDICATION');
+    L.push('MEDICATION & SUPPLEMENTS');
     meds.forEach(m => {
       const r = m.yes + m.abit + m.no;
       L.push(`- ${m.name}: taken ${m.n} ${m.n === 1 ? 'time' : 'times'}${m.kind ? ' (' + m.kind.toLowerCase() + ')' : ''}${r ? `. Helped: yes ${m.yes}, a bit ${m.abit}, no ${m.no}` : ''}`);
@@ -1207,12 +1258,14 @@ function renderPatterns() {
 /* ---------- MORE ---------- */
 let newMedKind = 'As needed', wipeArmed = false;
 function renderMore() {
+  const thumb = m => { const img = m.img || presetInfo(m.name).img; return `<span class="pick-img">${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : esc(m.name.charAt(0))}</span>`; };
   $('#med-list').innerHTML = state.meds.length
-    ? state.meds.map((m, i) => `<div class="li"><div class="t"><span>${esc(m.name)}</span><small>${esc(m.kind || 'As needed')}</small></div>
+    ? state.meds.map((m, i) => `<div class="li"><div class="lead">${thumb(m)}<div class="t"><span>${esc(m.name)}</span><small>${esc(m.dose || presetInfo(m.name).dose || '')}</small></div></div>
+        <button type="button" class="kind-btn" data-kind-med="${i}" aria-label="Change when you take ${esc(m.name)}">${esc(m.kind || 'As needed')}</button>
         <button type="button" class="x" data-rm-med="${i}" aria-label="Remove ${esc(m.name)}">×</button></div>`).join('')
     : `<div class="li"><div class="t"><span class="muted">No saved medications</span><small>Add them here and they become one-tap choices when you log Medication.</small></div></div>`;
   $('#pro-list').innerHTML = state.probiotics.length
-    ? state.probiotics.map((p, i) => `<div class="li"><div class="t"><span>${esc(p.name)}</span></div>
+    ? state.probiotics.map((p, i) => `<div class="li"><div class="lead">${thumb(p)}<div class="t"><span>${esc(p.name)}</span><small>${esc(p.dose || presetInfo(p.name).dose || '')}</small></div></div>
         <button type="button" class="x" data-rm-pro="${i}" aria-label="Remove ${esc(p.name)}">×</button></div>`).join('')
     : `<div class="li"><div class="t"><span class="muted">No saved probiotics</span><small>Add them here and they become one-tap choices when you log Probiotic.</small></div></div>`;
   $('#win-val').textContent = state.settings.window + ' h';
@@ -1226,6 +1279,8 @@ function renderMore() {
   $('#btn-wipe').textContent = wipeArmed ? 'Tap again to erase everything' : 'Erase all data';
 }
 $('#med-list').addEventListener('click', ev => {
+  const k = ev.target.closest('[data-kind-med]');
+  if (k) { const m = state.meds[Number(k.dataset.kindMed)]; m.kind = m.kind === 'Regular' ? 'As needed' : 'Regular'; save(); renderMore(); return; }
   const b = ev.target.closest('[data-rm-med]'); if (!b) return;
   state.meds.splice(Number(b.dataset.rmMed), 1); save(); renderMore();
 });
