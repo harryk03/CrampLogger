@@ -22,7 +22,7 @@
   --fg:#f2f4f7; --fg-2:#a3a9b5; --fg-3:#6e7482;
   --accent:#8ab4ff; --danger:#ff6b6b; --good:#6fd6a0;
   --cramp:#ffa36c; --severe:#ff6b81; --nausea:#c7a2ff; --morning:#ffd36e;
-  --food:#6fd6a0; --coffee:#d9b48c; --alcohol:#ec8fc8; --water:#6cc8ff;
+  --food:#6fd6a0; --snack:#b4dd7f; --coffee:#d9b48c; --alcohol:#ec8fc8; --water:#6cc8ff;
   --med:#7fb2ff; --probiotic:#5fd4c8; --body:#aab3cc;
   --font:-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
   --mono:ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -427,15 +427,25 @@ const SYMPTOMS = ['cramps','severe','nausea','morning'];
 const GUT = ['cramps','severe','nausea'];
 const GROUPS = [
   ['Symptoms', ['cramps','severe','nausea','morning'], 'sym'],
-  ['Food & drink', ['meal','alcohol','water']],
+  ['Food & drink', ['meal','snack','alcohol','water']],
   ['Medication & body', ['med','probiotic','bowel','sleep','stress','exercise']],
 ];
 const TAGS = ['Dairy','Gluten / wheat','Spicy','Greasy / fried','Onion / garlic','Sugary','Red meat','Beans / lentils','Coffee / caffeine','Fizzy drink','Takeaway'];
 
 /* Preloaded choices. Each preset is added once; removing it in More keeps it removed. */
 const PRESET_MEDS = [
-  // {name:'Example 10mg', kind:'As needed'},
+  {name:'Buscopan 10mg', kind:'As needed'},
 ];
+/* Buttons that log an existing entry type with preset details. */
+const TILES = {
+  snack: {label:'Snack', c:'--snack', type:'meal', preset:{mealType:'Snack', portion:'Small'}},
+};
+const tileInfo = t => TILES[t] || TYPES[t];
+function tileMatch(t, e) {
+  if (t === 'snack') return e.type === 'meal' && e.mealType === 'Snack';
+  if (t === 'meal') return e.type === 'meal' && e.mealType !== 'Snack';
+  return e.type === t;
+}
 const PRESET_PROBIOTICS = [
   // {name:'Example probiotic'},
 ];
@@ -520,7 +530,7 @@ function details(e) {
       if (e.sev) p.push(`${e.sev}/5`); break;
     case 'meal':
       if (e.food) p.push(e.food);
-      if (e.mealType) p.push(e.mealType.toLowerCase());
+      if (e.mealType && e.mealType !== 'Snack') p.push(e.mealType.toLowerCase());
       if (e.portion && e.portion !== 'Normal') p.push(e.portion.toLowerCase() + ' portion');
       if (e.tags && e.tags.length) p.push(e.tags.join(', '));
       break;
@@ -585,8 +595,8 @@ function render() {
 function buildTiles() {
   $('#groups').innerHTML = GROUPS.map(([name, types, cls]) => `
     <section class="block"><h2>${esc(name)}</h2><div class="grid">
-      ${types.map(t => `<button type="button" class="tile ${cls || ''} ${t === 'meal' ? 'wide' : ''}" data-type="${t}" style="--c:var(${TYPES[t].c})">
-        <span class="dot"></span><span class="tile-text"><span class="tile-label">${esc(label(t))}</span><span class="tile-meta"></span></span>
+      ${types.map(t => `<button type="button" class="tile ${cls || ''}" data-type="${t}" style="--c:var(${tileInfo(t).c})">
+        <span class="dot"></span><span class="tile-text"><span class="tile-label">${esc(tileInfo(t).label)}</span><span class="tile-meta"></span></span>
       </button>`).join('')}
     </div></section>`).join('');
   $$('#groups .tile').forEach(b => b.addEventListener('click', () => quickLog(b.dataset.type, b)));
@@ -601,7 +611,7 @@ function renderLog() {
     : 'Tap a button the moment something happens. Add detail after.';
   const today = dayKey(now);
   $$('#groups .tile').forEach(b => {
-    const todays = all.filter(e => e.type === b.dataset.type && dayKey(e.t) === today);
+    const todays = all.filter(e => tileMatch(b.dataset.type, e) && dayKey(e.t) === today);
     const meta = b.querySelector('.tile-meta');
     if (todays.length) {
       meta.textContent = `${todays.length} today · last ${fmtTime(todays[todays.length-1].t)}`;
@@ -620,9 +630,11 @@ function renderLog() {
     if (e) { e.helped = b.dataset.helped; save(); haptic(); renderLog(); if (b.dataset.helped !== 'Skip') toast('Saved'); }
   }));
 }
-function quickLog(type, el) {
+function quickLog(tile, el) {
+  const info = TILES[tile], type = info ? info.type : tile;
   const e = {id: uid(), type, t: Date.now()};
   if (type === 'meal') { e.mealType = guessMealType(e.t); e.portion = 'Normal'; e.tags = []; }
+  if (info && info.preset) Object.assign(e, info.preset);
   if (type === 'alcohol' || type === 'water') e.count = 1;
   if (type === 'med') {
     e.kind = 'As needed';
@@ -723,7 +735,7 @@ function fieldsFor(e) {
 function renderSheet() {
   const e = cur;
   sheet.style.setProperty('--c', `var(${TYPES[e.type].c})`);
-  $('#sheet-title').textContent = label(e.type);
+  $('#sheet-title').textContent = e.type === 'meal' && e.mealType === 'Snack' ? 'Snack' : label(e.type);
   updateSheetSub();
   $('#sheet-body').innerHTML = fieldsFor(e);
   const del = $('#sheet-delete');
@@ -911,7 +923,7 @@ function renderHistory() {
     return `<div class="day"><div class="day-h"><span>${esc(dayLabel(es[0].t))}</span><span class="muted">${nSym ? nSym + (nSym === 1 ? ' symptom' : ' symptoms') : ''}</span></div>
       <div class="rows">${es.map(e => `<button type="button" class="row" data-id="${e.id}" style="--c:var(${TYPES[e.type].c})">
         <span class="r-time">${fmtTime(e.t)}</span><span class="dot"></span>
-        <span class="r-main"><span class="r-label">${esc(label(e.type))}${e.sample ? '<span class="pill">Sample</span>' : ''}</span>
+        <span class="r-main"><span class="r-label">${esc(e.type === 'meal' && e.mealType === 'Snack' ? 'Snack' : label(e.type))}${e.sample ? '<span class="pill">Sample</span>' : ''}</span>
         ${details(e).length ? `<span class="r-det">${esc(details(e).join(' · '))}</span>` : ''}</span></button>`).join('')}</div></div>`;
   }).join('');
 }
